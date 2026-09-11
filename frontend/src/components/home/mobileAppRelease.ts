@@ -1,0 +1,12 @@
+// Matches the downloadable APK. Update together with the file when releasing.
+export const APK_RELEASE = {
+  "filename": "silacod-1.0.0-android-arm64.apk",
+  "url": "/downloads/silacod-1.0.0-android-arm64.apk",
+  "version": "1.0.0",
+  "versionCode": 1,
+  "package": "com.silacod.mobile",
+  "minSdk": 24,
+  "abi": "arm64-v8a",
+  "bytes": 45272154,
+  "sha256": "9ef7f54e13343f2e86dde9491c20cd92f916617834f08eb0de0e3d257ff0ac4f"
+} as const;

@@ -44,10 +44,12 @@ export const SUB_ACCOUNT_PERMISSIONS = [
   'subCanViewInvoices',
   'subCanViewIntegrations',
   'subCanViewMarketplace',
+  'subCanViewAbandonedCarts',
   'subCanManageSupport',
   'subCanUseChat',
   'subCanManagePixels',
   'subCanManageDomains',
+  'subCanManageStore',
   // Individual actions carved out of the pages above, because each is
   // destructive, spends money, or changes what the customer sees.
   'subCanDeleteLeads',
@@ -171,6 +173,38 @@ const ACCESS_RULES: AccessRule[] = [
 
   // =================================================================== leads
   // Reference data the lead screens read before they can show anything.
+  // ======================================================= abandoned carts
+  // Its own page and its own grant. The actions are gated on the permissions
+  // that already govern the same act elsewhere: deleting is deleting, handing
+  // to the call centre is pushing, and spending sheet credits is the
+  // integrations surface. Ordered before the broad /leads rule below, though
+  // these paths do not sit under /leads precisely so they cannot inherit it.
+  {
+    methods: ['POST'],
+    test: /^\/vendor\/abandoned-carts\/(bulk-delete)$/,
+    perm: 'subCanDeleteLeads',
+    scope: 'vendor',
+  },
+  {
+    methods: ['DELETE'],
+    test: /^\/vendor\/abandoned-carts\/[^/]+$/,
+    perm: 'subCanDeleteLeads',
+    scope: 'vendor',
+  },
+  {
+    methods: ['POST'],
+    test: /^\/vendor\/abandoned-carts\/([^/]+\/send-to-call-center|bulk-send-to-call-center)$/,
+    perm: 'subCanPushToCallCenter',
+    scope: 'vendor',
+  },
+  {
+    methods: ['POST', 'PATCH'],
+    test: /^\/vendor\/abandoned-carts\/([^/]+\/send-to-sheet|bulk-send-to-sheet|settings)$/,
+    perm: 'subCanViewIntegrations',
+    scope: 'vendor',
+  },
+  { methods: READ, test: /^\/vendor\/abandoned-carts(\/|$)/, perm: 'subCanViewAbandonedCarts', scope: 'vendor' },
+
   { methods: ['GET', 'HEAD', 'POST'], test: /^\/leads\/coliaty\//, perm: 'subCanViewLeads', scope: 'vendor' },
   // The product picker. The integration screens need it to map an imported
   // order onto one of the vendor's products, so it is reachable from either
@@ -247,6 +281,9 @@ const ACCESS_RULES: AccessRule[] = [
   // =================================================================== links
   // The landing-page builder.
   { methods: ['GET', 'HEAD', 'PUT', 'POST'], test: /^\/influencer\/links\/\d+\/landing-page$/, perm: 'subCanUseLinkBuilder', scope: 'vendor' },
+  // Studio is the same builder through a different door; same grant.
+  { methods: ALL, test: /^\/studio\/store(\/|$)/, perm: 'subCanManageStore', scope: 'vendor' },
+  { methods: ALL, test: /^\/studio(\/|$)/, perm: 'subCanUseLinkBuilder', scope: 'vendor' },
   // Regenerating a code breaks every copy of the old link already in the wild.
   { methods: ['POST'], test: /^\/influencer\/links\/\d+\/(send-regen-otp|verify-regen-otp)$/, perm: 'subCanRegenerateLinks', scope: 'vendor' },
   // Creating a link, and the name check the create form runs as you type.
@@ -345,6 +382,10 @@ const ACCESS_RULES: AccessRule[] = [
   { methods: READ, test: /^\/auth\/check-subdomain$/, perm: 'subCanManageDomains', scope: 'vendor' },
   // Re-checking DNS status is harmless but still a call out to Cloudflare.
   { methods: ['POST'], test: /^\/domain\/refresh$/, perm: 'subCanRefreshDomain', scope: 'vendor' },
+
+  // ================================================================= store
+  // Store management, themes, collections and custom pages.
+  { methods: ALL, test: /^\/store(\/|$)/, perm: 'subCanManageStore', scope: 'vendor' },
 
   // ================================================================= uploads
   // Content attachments only. /upload/avatar is handled above at scope 'self'

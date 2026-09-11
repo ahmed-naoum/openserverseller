@@ -369,6 +369,9 @@ export const checkoutBlock: BlockRenderer = {
 
     const cfg = {
       code: ctx.code,
+      // Labels the abandoned cart this page's runtime reports. Compiled in so
+      // the capture endpoint never has to resolve the link to name the product.
+      productName: ctx.productName,
       packs: packs.map((o: any, i: number) => ({
         id: String(o?.id ?? i),
         // The NAME, bare. getPackPrice matches option.name or option.id and

@@ -10,6 +10,7 @@ import {
   DollarSign, CheckCircle, AlertCircle, FileText, RefreshCw, ChevronDown, ShieldAlert,
   Calendar, Clock, Truck, Headphones
 } from 'lucide-react';
+import { SweetAlertCard } from '../../components/ui/SweetAlert';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface Lead {
@@ -975,40 +976,16 @@ export default function HelperLeads() {
           </form>
         </Modal>
       )}
-      {/* Confirmation Modal */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
-            <div className="p-6 text-center">
-              <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center bg-indigo-50 text-indigo-600">
-                <Headphones size={32} />
-              </div>
-              <h2 className="text-xl font-black text-slate-800 tracking-tight mb-2">
-                {confirmModal.title}
-              </h2>
-              <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                {confirmModal.message}
-              </p>
-            </div>
-            
-            <div className="p-6 bg-slate-50/50 flex gap-3">
-              <button
-                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                className="flex-1 px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-white border border-slate-100 rounded-2xl transition-all shadow-sm"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={confirmModal.onConfirm}
-                disabled={isPushingBulk}
-                className="flex-1 px-6 py-3 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
-              >
-                {isPushingBulk ? 'En cours...' : 'Confirmer'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SweetAlertCard
+        open={confirmModal.isOpen}
+        type="question"
+        icon={<Headphones size={34} />}
+        title={confirmModal.title}
+        text={confirmModal.message}
+        loading={isPushingBulk}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+      />
     </div>
   );
 }

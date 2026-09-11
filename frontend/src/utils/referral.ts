@@ -28,6 +28,74 @@ export function buildReferralUrl(code: string, subdomain?: string | null, custom
   return `${protocol}//${sub}.${cleanHost}/r/${code}`;
 }
 
+/**
+ * Builds a storefront URL with the seller's custom domain or subdomain.
+ * In development (localhost): http://<subdomain>.localhost:5173/<path>
+ * In production: https://<subdomain>.silacod.com/<path> or https://<customDomain>/<path>
+ */
+export function buildStoreUrl(
+  path: string = '',
+  subdomain?: string | null,
+  customDomain?: string | null,
+  customDomainStatus?: string | null
+): string {
+  const cleanPath = path ? (path.startsWith('/') ? path : `/${path}`) : '';
+
+  if (customDomain && customDomainStatus === 'ACTIVE') {
+    return `https://${customDomain}${cleanPath}`;
+  }
+
+  const { protocol, host, hostname } = window.location;
+
+  if (!subdomain) {
+    return `${protocol}//${host}${cleanPath}`;
+  }
+
+  const sub = subdomain.trim().toLowerCase();
+
+  // If host already starts with this subdomain, keep it
+  const hostLower = host.toLowerCase();
+  if (hostLower.startsWith(sub + '.')) {
+    return `${protocol}//${host}${cleanPath}`;
+  }
+
+  // Local development. Browsers resolve any *.localhost name to the loopback
+  // address themselves (no hosts-file entry needed), so a seller host works
+  // exactly as in production and every link on the store keeps the store.
+  // The `?__store=` query the SPA also understands is a fallback for
+  // 127.0.0.1, which has no subdomains; it is lost on the first plain link.
+  if (hostname === 'localhost') {
+    return `${protocol}//${sub}.${host}${cleanPath}`;
+  }
+  if (hostname === '127.0.0.1') {
+    const separator = cleanPath.includes('?') ? '&' : '?';
+    return `${protocol}//${host}${cleanPath}${separator}__store=${sub}`;
+  }
+
+  // Clean www. from host in production (e.g. abdo.silacod.com)
+  const cleanHost = host.replace(/^www\./i, '');
+
+  return `${protocol}//${sub}.${cleanHost}${cleanPath}`;
+}
+
+/**
+ * A path on the store the visitor is already on.
+ *
+ * On a seller host (`abdo.silacod.com`, `abdo.localhost`) the path is enough.
+ * On `127.0.0.1`, where a subdomain cannot exist, the store is named by a
+ * `?__store=` query instead — and a plain path would leave the store for the
+ * platform. Carry the query across.
+ */
+export function storePath(path: string): string {
+  const clean = path.startsWith('/') ? path : `/${path}`;
+  if (typeof window === 'undefined') return clean;
+  const slug = new URLSearchParams(window.location.search).get('__store');
+  if (!slug) return clean;
+  const url = new URL(clean, window.location.origin);
+  if (!url.searchParams.get('__store')) url.searchParams.set('__store', slug);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 /** Query param carrying proof of the page a visitor was sent from. */
 export const SOURCE_PARAM = '_s';
 

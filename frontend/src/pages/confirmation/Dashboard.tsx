@@ -11,6 +11,7 @@ import {
 import { FaXTwitter } from 'react-icons/fa6';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { swal } from '../../components/ui/SweetAlert';
 
 // Helper to get correct file URL
 const getFileUrl = (url: string) => {
@@ -623,8 +624,8 @@ export default function ConfirmationDashboard() {
                                </span>
                              </button>
                              <button
-                               onClick={() => {
-                                 if(window.confirm("Êtes-vous sûr de vouloir rejeter ce dossier ? Cette action est définitive.")) {
+                               onClick={async () => {
+                                 if (await swal.danger({ title: 'Rejeter ce dossier ?', text: 'Cette action est définitive.', confirmText: 'Rejeter' })) {
                                    handleUpdateStatus(selectedUser.uuid, 'REJECTED');
                                  }
                                }}

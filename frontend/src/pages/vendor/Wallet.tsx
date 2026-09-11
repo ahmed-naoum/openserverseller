@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { walletApi, payoutsApi } from '../../lib/api';
 import toast from 'react-hot-toast';
+import { Wallet } from 'lucide-react';
+import PageHeader from '../../components/common/PageHeader';
 
 const TX_PAGE_SIZE = 20;
 
@@ -80,15 +82,16 @@ export default function VendorWallet() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Portefeuille</h1>
-          <p className="text-gray-500 mt-1">Gérez vos revenus et retraits</p>
-        </div>
-        <button onClick={() => setShowPayoutModal(true)} className="btn-primary">
-          💸 Demander un retrait
-        </button>
-      </div>
+      <PageHeader
+        icon={Wallet}
+        title="Portefeuille"
+        subtitle="Gérez vos revenus et retraits"
+        actions={
+          <button onClick={() => setShowPayoutModal(true)} className="btn-primary">
+            💸 Demander un retrait
+          </button>
+        }
+      />
 
       {walletLoading ? (
         <div className="text-center py-12">Chargement...</div>

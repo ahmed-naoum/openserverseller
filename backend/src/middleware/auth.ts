@@ -192,7 +192,8 @@ export const authenticate = async (
     } else if (req.headers.cookie) {
       const cookies = parseCookies(req.headers.cookie);
       token = cookies.token || '';
-    } else if (req.query.token) {
+    } else if (req.query.token && (req.originalUrl?.includes('/contract-preview') || req.path?.includes('/contract-preview') || req.originalUrl?.includes('/stream'))) {
+      // Query param token is strictly restricted to contract preview iframe and stream
       token = req.query.token as string;
     }
 
@@ -205,9 +206,18 @@ export const authenticate = async (
     const jwt = require('jsonwebtoken');
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
-      userId: string;
+      userId?: string;
+      type?: string;
       isImpersonated?: boolean;
     };
+
+    // SEC-01: Block non-access tokens (e.g. 2fa, force_password_change, refresh) from accessing normal API endpoints
+    if (!decoded.userId || (decoded.type && decoded.type !== 'access')) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Type de jeton invalide pour cette ressource.',
+      });
+    }
 
     const user = await prisma.user.findUnique({
       where: { uuid: decoded.userId },

@@ -7,6 +7,7 @@ import { streamLogToExternalTransport } from '../services/logger.service.js';
 import { logImmutableAction } from '../utils/hashChain.js';
 import { getClientIp } from '../utils/clientIp.js';
 import { findBan, recordBanHit, banIp } from '../lib/ipBan.js';
+import { DEFAULT_FRAUD_THRESHOLD } from '../lib/leadFraud.js';
 
 export interface DynamicSecuritySettings {
   enableIPBlocking: boolean;
@@ -19,10 +20,20 @@ export interface DynamicSecuritySettings {
   globalRateLimitMax: number;
   uploadRateLimitMax: number;
   payoutRateLimitMax: number;
+  authenticatedRateLimitMax: number;
   /**
-   * Ban an IP once it has placed this many landing-page orders in 24h.
-   * 0 disables it. Distinct from the checkout rate limiter, which only refuses
-   * the extra orders and lets the same visitor keep trying tomorrow.
+   * Orders from one IP inside 24h, platform-wide, before it is treated as
+   * fraud: the row gets a SUSPECT badge on every leads screen AND the address
+   * is banned automatically. 0 turns both off together.
+   *
+   * Distinct from the checkout rate limiter, which only refuses the extra
+   * orders and lets the same visitor walk back in tomorrow.
+   */
+  fraudIpThreshold: number;
+  /**
+   * @deprecated Superseded by fraudIpThreshold, which does the same job and
+   * also drives the badge. Still read when it was explicitly set to a positive
+   * value, so an admin who tuned it does not get silently reset to the default.
    */
   autoBanOrderThreshold: number;
   /** Hours an automatic ban lasts. 0 means permanent. */
@@ -52,8 +63,10 @@ export const fetchSecuritySettings = async (): Promise<DynamicSecuritySettings> 
     globalRateLimitMax: 100,
     uploadRateLimitMax: 10,
     payoutRateLimitMax: 5,
-    // Off by default: switching this on retroactively bans nobody, but a badly
-    // chosen threshold on a shared carrier NAT would ban real customers.
+    authenticatedRateLimitMax: 2000,
+    fraudIpThreshold: DEFAULT_FRAUD_THRESHOLD,
+    // Legacy knob, kept so an explicit setting survives the rename. Nothing
+    // reads it directly any more — see the resolution below.
     autoBanOrderThreshold: 0,
     autoBanDurationHours: 24
   };
@@ -76,6 +89,20 @@ export const fetchSecuritySettings = async (): Promise<DynamicSecuritySettings> 
         globalRateLimitMax: typeof data.globalRateLimitMax === 'number' ? data.globalRateLimitMax : defaultSettings.globalRateLimitMax,
         uploadRateLimitMax: typeof data.uploadRateLimitMax === 'number' ? data.uploadRateLimitMax : defaultSettings.uploadRateLimitMax,
         payoutRateLimitMax: typeof data.payoutRateLimitMax === 'number' ? data.payoutRateLimitMax : defaultSettings.payoutRateLimitMax,
+        authenticatedRateLimitMax: typeof data.authenticatedRateLimitMax === 'number' ? data.authenticatedRateLimitMax : defaultSettings.authenticatedRateLimitMax,
+        // Resolution order for the threshold, and the reason for it: a stored
+        // row written before the rename has no fraudIpThreshold at all, and
+        // its autoBanOrderThreshold is 0 simply because that was the old
+        // default — reading that as "the admin turned fraud detection off"
+        // would ship the feature switched off everywhere it already exists.
+        // So: the new key wins, then a legacy value someone deliberately set
+        // above zero, then the default.
+        fraudIpThreshold:
+          typeof data.fraudIpThreshold === 'number' && data.fraudIpThreshold >= 0
+            ? Math.floor(data.fraudIpThreshold)
+            : typeof data.autoBanOrderThreshold === 'number' && data.autoBanOrderThreshold > 0
+              ? Math.floor(data.autoBanOrderThreshold)
+              : defaultSettings.fraudIpThreshold,
         autoBanOrderThreshold: typeof data.autoBanOrderThreshold === 'number' ? data.autoBanOrderThreshold : defaultSettings.autoBanOrderThreshold,
         autoBanDurationHours: typeof data.autoBanDurationHours === 'number' ? data.autoBanDurationHours : defaultSettings.autoBanDurationHours,
       };
@@ -541,6 +568,9 @@ export const securityHeaders = (
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  }
   next();
 };
 
@@ -621,44 +651,83 @@ const STAFF_ROLES = [
 
 // Verifying the JWT and loading the user hits the DB on every single request,
 // which is exactly the wrong thing to do on the hot path we are trying to speed
-// up. Cache the token -> "is staff" verdict for a short while instead.
-const staffTokenCache = new Map<string, { isStaff: boolean; expiresAt: number }>();
-const STAFF_CACHE_TTL = 60_000;
+// up. Cache the token -> authenticated user verdict for a short while instead.
+export interface AuthenticatedSessionInfo {
+  userId: string;
+  isStaff: boolean;
+  roleName?: string;
+}
 
-const isStaffToken = async (token: string): Promise<boolean> => {
+const authTokenCache = new Map<string, { user: AuthenticatedSessionInfo | null; expiresAt: number }>();
+const AUTH_CACHE_TTL = 60_000;
+
+export const getAuthenticatedUserFromRequest = async (req: Request): Promise<AuthenticatedSessionInfo | null> => {
+  // If req.user is already populated by passport or previous auth middleware
+  const existingUser = (req as any).user;
+  if (existingUser?.uuid) {
+    const isStaff = !!existingUser.role?.name && STAFF_ROLES.includes(existingUser.role.name);
+    return {
+      userId: existingUser.uuid,
+      isStaff,
+      roleName: existingUser.role?.name,
+    };
+  }
+
+  const token = extractToken(req);
+  if (!token) return null;
+
   const now = Date.now();
-  const cached = staffTokenCache.get(token);
-  if (cached && cached.expiresAt > now) return cached.isStaff;
+  const cached = authTokenCache.get(token);
+  if (cached && cached.expiresAt > now) {
+    return cached.user;
+  }
 
-  let isStaff = false;
+  let sessionInfo: AuthenticatedSessionInfo | null = null;
   try {
     const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId?: string };
-    if (decoded?.userId) {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId?: string; type?: string };
+    if (decoded?.userId && (!decoded.type || decoded.type === 'access')) {
       const user = await prisma.user.findUnique({
         where: { uuid: decoded.userId },
         include: { role: true },
       });
-      isStaff = !!user && STAFF_ROLES.includes(user.role.name);
+      if (user && user.isActive && !user.deletedAt) {
+        const isStaff = !!user.role && STAFF_ROLES.includes(user.role.name);
+        sessionInfo = {
+          userId: user.uuid,
+          isStaff,
+          roleName: user.role?.name,
+        };
+      }
     }
   } catch {
-    isStaff = false;
+    sessionInfo = null;
   }
 
   // Keep the map from growing without bound on a long-lived process.
-  if (staffTokenCache.size > 5000) {
-    for (const [key, entry] of staffTokenCache) {
-      if (entry.expiresAt <= now) staffTokenCache.delete(key);
+  if (authTokenCache.size > 5000) {
+    for (const [key, entry] of authTokenCache) {
+      if (entry.expiresAt <= now) authTokenCache.delete(key);
     }
-    if (staffTokenCache.size > 5000) staffTokenCache.clear();
+    if (authTokenCache.size > 5000) authTokenCache.clear();
   }
 
-  staffTokenCache.set(token, { isStaff, expiresAt: now + STAFF_CACHE_TTL });
-  return isStaff;
+  authTokenCache.set(token, { user: sessionInfo, expiresAt: now + AUTH_CACHE_TTL });
+  return sessionInfo;
+};
+
+export const isStaffToken = async (token: string): Promise<boolean> => {
+  if (!token) return false;
+  const mockReq = {
+    headers: { authorization: `Bearer ${token}` },
+    query: {},
+  } as unknown as Request;
+  const user = await getAuthenticatedUserFromRequest(mockReq);
+  return !!user?.isStaff;
 };
 
 /** Reads the bearer token, the auth cookie, or the ?token= query param. */
-const extractToken = (req: Request): string | null => {
+export const extractToken = (req: Request): string | null => {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return authHeader.slice(7).trim() || null;
@@ -681,7 +750,7 @@ const extractToken = (req: Request): string | null => {
 const isWhatsappAgentRequest = (req: Request): boolean =>
   (req.originalUrl || '').includes('/whatsapp-agent');
 
-const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
+export const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
   try {
     if (isWhatsappAgentRequest(req)) {
       return true;
@@ -690,12 +759,6 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
     const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
 
     // SECURITY: never skip rate limiting in production based on IP.
-    // `trust proxy` is enabled, so `req.ip` is derived from the X-Forwarded-For
-    // header and is fully attacker-controlled — a request carrying
-    // `X-Forwarded-For: 127.0.0.1` used to disable ALL rate limiting, including
-    // login and OTP brute-force protection. In production the app also sits behind
-    // a local reverse proxy, so `req.socket.remoteAddress` is 127.0.0.1 as well and
-    // is equally unusable as a bypass signal. Only ever relax this in development.
     if (process.env.NODE_ENV !== 'production') {
       const peerIP = req.socket.remoteAddress || '';
       if (peerIP === '::1' || peerIP === '127.0.0.1' || peerIP === '::ffff:127.0.0.1') {
@@ -708,8 +771,8 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
       return true;
     }
 
-    // Skip if request is a staff login attempt
-    if (req.path && req.path.includes('/auth/login')) {
+    // Skip if request is an active user login attempt (auth.routes protects login with its own loginLimiter)
+    if (req.path && (req.path.includes('/auth/login') || req.path.includes('/auth/refresh') || req.path.includes('/auth/otp'))) {
       const { email, phone } = req.body || {};
       if (email || phone) {
         const user = await prisma.user.findFirst({
@@ -721,17 +784,16 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
           },
           include: { role: true }
         });
-        if (user && STAFF_ROLES.includes(user.role.name)) {
+        if (user && user.isActive && !user.deletedAt) {
           return true;
         }
       }
     }
 
-    // Skip if the request carries a token belonging to a staff account. The token
-    // can arrive as a bearer header, a cookie, or ?token= — PDF/exports downloads
-    // open in a new tab and only have the last two.
-    const token = extractToken(req);
-    if (token && (await isStaffToken(token))) {
+    // Skip if the request carries a valid session for ANY active authenticated user
+    // (authenticated users are governed by the dedicated authenticatedRateLimiter)
+    const authUser = await getAuthenticatedUserFromRequest(req);
+    if (authUser) {
       return true;
     }
   } catch (err) {
@@ -742,7 +804,11 @@ const shouldSkipRateLimit = async (req: Request): Promise<boolean> => {
 
 const rateLimitBlockedIPs = new Map<string, number>();
 
-const isIPRateLimitBlocked = (ip: string): boolean => {
+export const recordRateLimitBlock = (ip: string, durationMs: number = 10 * 60 * 1000) => {
+  rateLimitBlockedIPs.set(ip, Date.now() + durationMs);
+};
+
+export const isIPRateLimitBlocked = (ip: string): boolean => {
   const blockedUntil = rateLimitBlockedIPs.get(ip);
   if (!blockedUntil) return false;
   if (Date.now() > blockedUntil) {
@@ -752,7 +818,7 @@ const isIPRateLimitBlocked = (ip: string): boolean => {
   return true;
 };
 
-// Middleware to immediately block rate-limited IPs (while respecting admin bypass)
+// Middleware to immediately block rate-limited IPs (while respecting authenticated user & admin bypass)
 export const rateLimitCheckMiddleware = async (
   req: Request,
   res: Response,
@@ -761,17 +827,15 @@ export const rateLimitCheckMiddleware = async (
   const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
 
   if (isIPRateLimitBlocked(clientIP)) {
-    // The agent pages are exempt from the limiter, but that exemption must not
-    // erase a block the same IP earned elsewhere — pass through, keep the block.
+    // The agent pages are exempt from the limiter
     if (isWhatsappAgentRequest(req)) {
       return next();
     }
 
     const skip = await shouldSkipRateLimit(req);
     if (skip) {
-      // Staff share an office IP with everyone else behind the same NAT, so a
-      // block triggered by another client would otherwise lock the back office
-      // out for ten minutes. Proving staff identity clears the block outright.
+      // Authenticated users or staff share an office/NAT/mobile IP with others.
+      // Proving a legitimate authenticated user session clears the IP block so they can work uninterrupted.
       rateLimitBlockedIPs.delete(clientIP);
       return next();
     }
@@ -786,8 +850,11 @@ export const rateLimitCheckMiddleware = async (
 };
 
 export const globalRateLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute window
-  limit: 100, // Max 100 requests per minute
+  windowMs: 15 * 60 * 1000, // 15 minute window
+  limit: async (req: Request) => {
+    const settings = await fetchSecuritySettings();
+    return settings.globalRateLimitMax || 100;
+  },
   skip: shouldSkipRateLimit,
   handler: (req: Request, res: Response) => {
     const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
@@ -800,7 +867,69 @@ export const globalRateLimiter = rateLimit({
     });
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  validate: { trustProxy: false }
+});
+
+/**
+ * Dedicated Rate Limiter for Authenticated Users:
+ * Provides a much longer/higher request quota (default 2,000 requests per 15 min).
+ * Limits are tracked per USER account (not by IP address), preventing office/shared IP lockouts.
+ * Exceeding this quota throttles only that user account with 429, NEVER banning their IP.
+ */
+export const authenticatedRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minute window
+  limit: async (req: Request) => {
+    const settings = await fetchSecuritySettings();
+    return settings.authenticatedRateLimitMax || 2000;
+  },
+  keyGenerator: (req: Request) => {
+    const authUser = (req as any).authenticatedUser || (req as any).user;
+    if (authUser?.userId || authUser?.uuid) {
+      return `user-${authUser.userId || authUser.uuid}`;
+    }
+    const token = extractToken(req);
+    if (token) {
+      return `token-${crypto.createHash('sha256').update(token).digest('hex').slice(0, 16)}`;
+    }
+    return getClientIp(req) || req.ip || 'unknown';
+  },
+  skip: async (req: Request) => {
+    if (isWhatsappAgentRequest(req)) return true;
+
+    // Check if the user is authenticated
+    const authUser = await getAuthenticatedUserFromRequest(req);
+    if (!authUser) {
+      // Not authenticated -> skip this limiter (unauthenticated traffic is handled by globalRateLimiter)
+      return true;
+    }
+
+    // Attach to req so keyGenerator doesn't need to re-verify token
+    (req as any).authenticatedUser = authUser;
+
+    // Staff/Super admins have unlimited back-office access
+    if (authUser.isStaff) {
+      return true;
+    }
+
+    const settings = await fetchSecuritySettings();
+    const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
+    if (settings.whitelistedIPs.includes(clientIP)) {
+      return true;
+    }
+
+    return false;
+  },
+  handler: (req: Request, res: Response) => {
+    // NEVER ban the IP address for authenticated users. Throttles only the user account.
+    res.status(429).json({
+      status: 'error',
+      message: "Limite de requêtes atteinte pour votre compte utilisateur (15 minutes). Veuillez patienter quelques instants avant de réessayer.",
+    });
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false }
 });
 
 export const login2faLimiter = rateLimit({
@@ -812,6 +941,7 @@ export const login2faLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false }
 });
 
 export const uploadRateLimiter = rateLimit({
@@ -826,7 +956,8 @@ export const uploadRateLimiter = rateLimit({
     message: 'Too many upload requests. Please try again later.'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  validate: { trustProxy: false }
 });
 
 export const payoutRateLimiter = rateLimit({
@@ -841,7 +972,8 @@ export const payoutRateLimiter = rateLimit({
     message: 'Too many payout requests. Please try again later.'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  validate: { trustProxy: false }
 });
 
 export const getBlockedIPsList = () => {
@@ -858,6 +990,14 @@ export const getBlockedIPsList = () => {
   return list;
 };
 
+export const clearAllRateLimitBlocks = () => {
+  rateLimitBlockedIPs.clear();
+};
+
 export const unblockIP = (ip: string) => {
+  if (ip === 'all' || ip === '*') {
+    rateLimitBlockedIPs.clear();
+    return true;
+  }
   return rateLimitBlockedIPs.delete(ip);
 };

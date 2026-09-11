@@ -8,6 +8,7 @@ import { Sparkles, Phone, MessageSquare, Zap, Package, Heart, Filter, ChevronRig
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { findColiatyCity } from '../../hooks/useCities';
 import { ReleaseCountdown } from '../../components/leads/ReleaseCountdown';
+import { swal } from '../../components/ui/SweetAlert';
 
 const AssignedTimer =({ lead, onTimeout, isGirly, isPrincess }: { lead: any; onTimeout?: () => void; isGirly: boolean; isPrincess: boolean }) => {
   const [globalCooldown, setGlobalCooldown] = useState<number>(0);
@@ -518,9 +519,11 @@ export default function AgentLeads() {
     const targets = deliverableLeads.filter((l: any) => selectedLeadIds.has(l.id));
     if (targets.length === 0 || bulkPushing) return;
 
-    const confirmed = window.confirm(
-      `Envoyer ${targets.length} lead${targets.length > 1 ? 's' : ''} à la livraison ?\n\nUn colis Coliaty sera créé pour chacun — cette action est irréversible.`
-    );
+    const confirmed = await swal.warn({
+      title: `Envoyer ${targets.length} lead${targets.length > 1 ? 's' : ''} à la livraison ?`,
+      text: 'Un colis Coliaty sera créé pour chacun — cette action est irréversible.',
+      confirmText: 'Envoyer',
+    });
     if (!confirmed) return;
 
     setBulkPushing(true);

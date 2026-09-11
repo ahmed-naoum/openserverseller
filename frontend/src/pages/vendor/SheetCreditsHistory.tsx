@@ -20,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { basePathFor } from '../../lib/dashboardBase';
 import { formatMoney, centsToLeads } from '../../lib/sheetMoney';
 import SheetPlansPanel from '../../components/vendor/SheetPlansPanel';
+import PageHeader from '../../components/common/PageHeader';
 
 /**
  * The full Google Sheets credit ledger.
@@ -100,28 +101,28 @@ export default function SheetCreditsHistory() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="min-w-0">
-          <Link
-            to={`${base}/leads?mode=SELLER`}
-            className="inline-flex items-center gap-1.5 text-[10px] font-black text-gray-400 hover:text-emerald-600 uppercase tracking-widest transition-colors mb-2"
-          >
-            {isRtl ? <ArrowRight className="w-3 h-3" /> : <ArrowLeft className="w-3 h-3" />}
-            {t('sc_back_to_leads', 'dashboard', 'Retour aux leads')}
-          </Link>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
-            {t('sc_history_title', 'dashboard', 'Crédits Google Sheets')}
-          </h1>
-          <p className="text-xs font-medium text-gray-500 mt-1">
-            {/* The tariff is quoted, never assumed: a lead costs what the API says it costs. */}
-            {t('sc_history_subtitle', 'dashboard', 'Historique complet des opérations · {price} par lead écrit').replace(
-              '{price}',
-              formatMoney(priceCents)
-            )}
-          </p>
-        </div>
+      {/* The back link belongs to the title block, so it is grouped with it —
+          left as a sibling, the page's `space-y-6` would push them apart. */}
+      <div>
+        <Link
+          to={`${base}/leads?mode=SELLER`}
+          className="inline-flex items-center gap-1.5 text-[10px] font-black text-gray-400 hover:text-emerald-600 uppercase tracking-widest transition-colors mb-2"
+        >
+          {isRtl ? <ArrowRight className="w-3 h-3" /> : <ArrowLeft className="w-3 h-3" />}
+          {t('sc_back_to_leads', 'dashboard', 'Retour aux leads')}
+        </Link>
+        {/* The tariff is quoted, never assumed: a lead costs what the API says it costs. */}
+        <PageHeader
+          className="mb-0"
+          icon={FileSpreadsheet}
+          title={t('sc_history_title', 'dashboard', 'Crédits Google Sheets')}
+          subtitle={t('sc_history_subtitle', 'dashboard', 'Historique complet des opérations · {price} par lead écrit').replace(
+            '{price}',
+            formatMoney(priceCents)
+          )}
+        />
       </div>
 
       {/* Packs. Above the balance deliberately: a running pack is what decides

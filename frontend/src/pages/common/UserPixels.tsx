@@ -5,6 +5,7 @@ import { userPixelApi, influencerApi, productsApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import toast from 'react-hot-toast';
+import { swal } from '../../components/ui/SweetAlert';
 
 interface UserPixel {
   id: number;
@@ -153,7 +154,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer ce pixel ?')) return;
+    if (!(await swal.danger({ title: 'Supprimer ce pixel ?', text: 'Cette action est irréversible.', confirmText: 'Supprimer' }))) return;
     try {
       await userPixelApi.delete(id);
       toast.success('Pixel supprimé');
@@ -210,7 +211,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
 
   const handleCapiRemove = async () => {
     if (!capiPixel?.hasAccessToken) return;
-    if (!confirm(t('pixel_capi_remove_confirm', 'dashboard') || 'Supprimer le token API Conversions de ce pixel ?')) return;
+    if (!(await swal.danger({ title: t('pixel_capi_remove_confirm', 'dashboard', 'Supprimer le token API Conversions de ce pixel ?') }))) return;
     try {
       setCapiSaving(true);
       await userPixelApi.update(capiPixel.id, { accessToken: '' });
@@ -240,7 +241,7 @@ export default function UserPixels({ platform = 'META' }: UserPixelsProps) {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">

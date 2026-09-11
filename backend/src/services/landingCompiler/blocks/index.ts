@@ -9,6 +9,17 @@ import { spacerBlock } from './spacer.js';
 import { heroBlock } from './hero.js';
 import { sliderBlock } from './slider.js';
 import { productsBlock } from './products.js';
+import { siteHeaderBlock } from './siteHeader.js';
+import { siteFooterBlock } from './siteFooter.js';
+import { textBlock } from './text.js';
+import { headerBlock } from './header.js';
+import { countdownBlock } from './countdown.js';
+import { productDetailBlock } from './productDetail.js';
+import { infoCardBlock } from './infoCard.js';
+import { featureListBlock } from './featureList.js';
+import { quoteBlock } from './quote.js';
+import { chipsBlock } from './chips.js';
+import { galleryBlock } from './gallery.js';
 
 /**
  * The renderer registry.
@@ -33,6 +44,17 @@ const RENDERERS: BlockRenderer[] = [
   heroBlock,
   sliderBlock,
   productsBlock,
+  siteHeaderBlock,
+  siteFooterBlock,
+  textBlock,
+  headerBlock,
+  countdownBlock,
+  productDetailBlock,
+  infoCardBlock,
+  featureListBlock,
+  quoteBlock,
+  chipsBlock,
+  galleryBlock,
 ];
 
 export const registry = new Map<string, BlockRenderer>(

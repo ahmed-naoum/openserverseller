@@ -22,7 +22,7 @@ import { api } from './api';
  * directement à la requête du CERVEAU, donc c'est le drapeau « Vision » de la
  * ligne du cerveau qui décide si une photo peut partir — pas un modèle à part.
  */
-export type ModelRole = 'BRAIN' | 'STT' | 'TTS';
+export type ModelRole = 'BRAIN' | 'STT' | 'TTS' | 'BUILDER';
 
 export interface AiModel {
   id: number;
@@ -532,6 +532,11 @@ export interface CollectedLead {
 
 export const waAdminApi = {
   overview: () => api.get('/admin/ai/overview'),
+
+  /** The store builder's brain (OpenDesign): which model reads briefs, and how it has been doing. */
+  builder: () => api.get('/admin/ai/builder'),
+  updateBuilder: (data: { enabled?: boolean; modelId?: number | null; cliModel?: 'sonnet' | 'opus' | 'haiku' | null; gptModelId?: number | null; writeCopy?: boolean; maxOutputTokens?: number; instructions?: string; sellerModes?: Record<'claude' | 'gpt' | 'instant', boolean>; sellerDefault?: 'claude' | 'gpt' | 'instant'; gptImages?: boolean; agent?: { enabled: boolean; allowPublish: boolean } }) => api.put('/admin/ai/builder', data),
+  testBuilder: (prompt: string, provider: 'claude' | 'openai' = 'claude') => api.post('/admin/ai/builder/test', { prompt, provider }, { timeout: 180_000 }),
 
   models: () => api.get('/admin/ai/models'),
   createModel: (data: Partial<AiModel>) => api.post('/admin/ai/models', data),

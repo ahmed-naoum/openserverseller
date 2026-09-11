@@ -15,6 +15,8 @@ import {
   type SubPermission,
 } from '../../lib/subAccountPermissions';
 import toast from 'react-hot-toast';
+import PageHeader from '../../components/common/PageHeader';
+import { swal } from '../../components/ui/SweetAlert';
 
 /**
  * Sub-account management. The vendor creates helper logins here and decides,
@@ -273,7 +275,7 @@ export default function VendorSubAccounts() {
   };
 
   const handleDelete = async (sub: SubAccount) => {
-    if (!window.confirm(`Supprimer définitivement le sous-compte de ${sub.fullName || sub.email} ?`)) return;
+    if (!(await swal.danger({ title: 'Supprimer ce sous-compte ?', text: `Le sous-compte de ${sub.fullName || sub.email} sera définitivement supprimé.`, confirmText: 'Supprimer' }))) return;
     try {
       await vendorSubAccountsApi.remove(sub.uuid);
       toast.success('Sous-compte supprimé.');
@@ -305,26 +307,22 @@ export default function VendorSubAccounts() {
   const loginUrl = `${window.location.origin}${VENDOR_HELPER_BASE}`;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-            <UserCog className="w-8 h-8 text-primary-600" />
-            Sous-comptes
-          </h1>
-          <p className="text-gray-500 font-medium mt-1 text-sm">
-            Créez des comptes assistants qui travaillent sur vos données, avec exactement les accès que vous leur donnez.
-          </p>
-        </div>
-        <button
-          onClick={openCreate}
-          disabled={subAccounts.length >= maxSubAccounts}
-          className="flex items-center gap-2 px-6 py-3 text-white rounded-xl font-bold transition-all shadow-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Plus className="w-5 h-5" />
-          Nouveau sous-compte
-        </button>
-      </div>
+    <div className="max-w-7xl mx-auto space-y-6">
+      <PageHeader
+        icon={UserCog}
+        title="Sous-comptes"
+        subtitle="Créez des comptes assistants qui travaillent sur vos données, avec exactement les accès que vous leur donnez."
+        actions={
+          <button
+            onClick={openCreate}
+            disabled={subAccounts.length >= maxSubAccounts}
+            className="flex items-center gap-2 px-6 py-3 text-white rounded-xl font-bold transition-all shadow-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Plus className="w-5 h-5" />
+            Nouveau sous-compte
+          </button>
+        }
+      />
 
       <div className="bg-primary-50/60 border border-primary-100 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
         <ShieldCheck className="w-5 h-5 text-primary-600 shrink-0" />

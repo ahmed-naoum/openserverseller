@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { normalizeSearch } from '../../utils/search';
 import { PackSelection, findPackOption, packVariantLabel, readCheckoutOptions, rowPackSelection } from '../../lib/leadPack';
+import LeadCartPanel from '../../components/leads/LeadCartPanel';
 
 const DEFAULT_UNASSIGN_MESSAGE = "Ce lead ne vous est plus assigné.";
 
@@ -1187,6 +1188,11 @@ export default function AgentLeadDetail() {
           </div>
         </div>
       </div>
+
+      {/* The storefront basket, when there is one. Rendered above the product
+          card because for a store lead there is no single product to show — the
+          card below stays hidden and this is the only record of the order. */}
+      <LeadCartPanel lead={lead} />
 
       {/* Product Info */}
       {product && (

@@ -7,6 +7,7 @@ import userSettingsRoutes from './userSettings.routes.js';
 import productRoutes from './product.routes.js';
 import categoryRoutes from './category.routes.js';
 import leadRoutes from './lead.routes.js';
+import vendorCartsRoutes from './vendorCarts.routes.js';
 import orderRoutes from './order.routes.js';
 import walletRoutes from './wallet.routes.js';
 import sheetCreditsRoutes from './sheetCredits.routes.js';
@@ -17,6 +18,9 @@ import warehouseRoutes from './warehouse.routes.js';
 import notificationRoutes from './notification.routes.js';
 import adminRoutes from './admin.routes.js';
 import publicRoutes from './public.routes.js';
+import publicStoreRoutes from './publicStore.routes.js';
+import vendorStoreRoutes from './vendorStore.routes.js';
+import studioRoutes from './studio.routes.js';
 import cityRoutes from './city.routes.js';
 import analyticsRoutes from './analytics.routes.js';
 import uploadRoutes from './upload.routes.js';
@@ -78,6 +82,8 @@ router.use('/users', auditLog, userRoutes);
 router.use('/products', auditLog, productRoutes);
 router.use('/categories', auditLog, categoryRoutes);
 router.use('/leads', auditLog, leadRoutes);
+// A seller's own abandoned checkouts. Off /leads on purpose — see the file header.
+router.use('/vendor/abandoned-carts', auditLog, vendorCartsRoutes);
 router.use('/invoices', auditLog, invoiceRoutes);
 router.use('/orders', auditLog, orderRoutes);
 router.use('/wallet', auditLog, walletRoutes);
@@ -119,6 +125,10 @@ router.use('/deploy', deployRoutes);
 router.use('/admin', auditLog, adminRoutes);
 
 router.use('/public', publicRoutes);
+router.use('/public/store', publicStoreRoutes);
+router.use('/store', auditLog, vendorStoreRoutes);
+// The page editor's command API — see routes/studio.routes.ts.
+router.use('/studio', auditLog, studioRoutes);
 router.use('/cities', cityRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/upload', uploadRoutes);

@@ -129,6 +129,16 @@ export const sliderBlock: BlockRenderer = {
     `.bk-sl-mt.pz:hover{animation-play-state:paused}` +
     `@keyframes bksl-mq{0%{transform:translate3d(0,0,0)}100%{transform:translate3d(-33.3333%,0,0)}}` +
     `.bk-sl-mi{flex-shrink:0;width:var(--sl-w);max-width:var(--sl-mw)}` +
+    // A static grid — no autoplay, no arrows, no dots, every card on screen —
+    // is a row of cards, and on a phone a row of four 80px cards is unreadable.
+    // It wraps instead: one column on phones, two on tablets. `!important`
+    // because the width is an inline custom property on the container.
+    `.bk-sl.gr .bk-sl-t{flex-wrap:wrap}` +
+    `@media(max-width:639px){.bk-sl.gr{--sl-w:100%!important}}` +
+    `@media(min-width:640px) and (max-width:1023px){.bk-sl.gr.g3,.bk-sl.gr.g4{--sl-w:calc(50% - var(--sl-gap) / 2)!important}}` +
+    // The marquee keeps moving on a phone but shows a card and a half, not four slivers.
+    `@media(max-width:639px){.bk-sl.mq{--sl-w:calc((100vw - 32px) * .72)!important}}` +
+    `@media(min-width:640px) and (max-width:1023px){.bk-sl.mq{--sl-w:calc((100vw - 32px) / 2 - var(--sl-gap))!important}}` +
     `.bk-sl-c{overflow:hidden;display:flex;flex-direction:column;height:100%;` +
     `transition:all .4s cubic-bezier(.16,1,.3,1)}` +
     `.bk-sl-m{width:100%;background:#f3f4f6;overflow:hidden;position:relative}` +
@@ -332,6 +342,9 @@ export const sliderBlock: BlockRenderer = {
 
     const fade = c.transitionEffect === 'fade' && per === 1;
     const zoom = c.transitionEffect === 'zoom';
+    // Every card on screen and nothing to move it: a grid, not a slider.
+    const grid = per > 1 && slides.length <= per && c.autoPlay === false && c.showArrows === false && c.showDots === false;
+    const gridClass = grid ? ` gr g${per}` : '';
 
     const vars =
       `${wrapStyle};--sl-gap:${gap}px;--sl-glow:${glow};--sl-dot:${dotColor};` +
@@ -381,7 +394,7 @@ export const sliderBlock: BlockRenderer = {
         : '';
 
     return (
-      `<div class="bk bk-sl${small}${entranceClass}" style="${vars}"` +
+      `<div class="bk bk-sl${small}${entranceClass}${gridClass}" style="${vars}"` +
       ` data-sl data-sl-per="${per}" data-sl-gap="${gap}" data-sl-by="${by}"` +
       ` data-sl-auto="${c.autoPlay !== false ? 'on' : 'off'}"` +
       ` data-sl-speed="${num(c.autoPlaySpeed || 4000, 4000, 100, 600000)}"` +

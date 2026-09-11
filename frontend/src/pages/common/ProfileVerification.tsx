@@ -70,20 +70,46 @@ export function getVerificationStatus(user: any, platformSettings?: any) {
   return { steps, completed, total, percentage };
 }
 
-// ─── Subdomain Configuration Form ────────────────────────────────────
+// ─── Store Name / Subdomain Configuration Form ───────────────────────
+/**
+ * Step 1 of verification: the store name.
+ *
+ * The name is already set by the time anyone sees this — registration takes it
+ * and provisions the storefront on it — so this step opens as a confirmation of
+ * the live address, with an explicit edit affordance. Renaming here goes through
+ * `save-subdomain`, which moves the store with the name; the OTP-guarded rename
+ * on the Domains page is for accounts that are past onboarding.
+ */
 function SubdomainConfigurationForm({ onComplete }: { onComplete: () => void }) {
   const { user } = useAuth();
   const { t } = useLanguage();
   const tVerif = (key: string, fallback?: string) => t(key, 'verification', fallback);
 
-  const [subdomain, setSubdomain] = useState(user?.subdomain || '');
+  const currentSubdomain = user?.subdomain || '';
+  const [isEditing, setIsEditing] = useState(!currentSubdomain);
+  const [subdomain, setSubdomain] = useState(currentSubdomain);
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState<'idle' | 'available' | 'taken' | 'invalid' | 'reserved' | 'blocked'>('idle');
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // A rename elsewhere (the Domains page, an admin) must not leave this field
+  // showing the old value.
   useEffect(() => {
+    if (!isEditing) setSubdomain(currentSubdomain);
+  }, [currentSubdomain, isEditing]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+
     if (!subdomain) {
+      setStatus('idle');
+      setFeedbackMessage('');
+      return;
+    }
+
+    // Re-typing the name they already own is not a change to validate.
+    if (subdomain === currentSubdomain) {
       setStatus('idle');
       setFeedbackMessage('');
       return;
@@ -128,7 +154,7 @@ function SubdomainConfigurationForm({ onComplete }: { onComplete: () => void }) 
     }, 500);
 
     return () => clearTimeout(delayDebounce);
-  }, [subdomain]);
+  }, [subdomain, isEditing, currentSubdomain]);
 
   const handleSave = async () => {
     if (status !== 'available') return;
@@ -136,6 +162,7 @@ function SubdomainConfigurationForm({ onComplete }: { onComplete: () => void }) 
     try {
       await authApi.saveSubdomain(subdomain.trim().toLowerCase());
       toast.success(tVerif('subdomain_toast_success', 'Subdomain configured successfully!'));
+      setIsEditing(false);
       onComplete();
     } catch (err: any) {
       toast.error(err.response?.data?.message || tVerif('subdomain_toast_error', 'Failed to save subdomain.'));
@@ -144,8 +171,16 @@ function SubdomainConfigurationForm({ onComplete }: { onComplete: () => void }) 
     }
   };
 
+  const handleCancel = () => {
+    setSubdomain(currentSubdomain);
+    setStatus('idle');
+    setFeedbackMessage('');
+    setIsEditing(false);
+  };
+
   const currentHost = window.location.host;
   const domainSuffix = currentHost.replace(/^www\./, '');
+  const storeUrl = `${window.location.protocol}//${currentSubdomain}.${domainSuffix}`;
 
   return (
     <div className="space-y-6 max-w-md mx-auto py-4">
@@ -158,55 +193,105 @@ function SubdomainConfigurationForm({ onComplete }: { onComplete: () => void }) 
         </p>
       </div>
 
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-slate-700">
-          {tVerif('subdomain_label', 'Choose your Subdomain name')}
-        </label>
-        <div className="relative flex items-center rounded-xl border-2 border-slate-200 bg-white focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all overflow-hidden">
-          <input
-            type="text"
-            value={subdomain}
-            onChange={(e) => setSubdomain(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
-            disabled={saving || !!user?.subdomain}
-            placeholder={tVerif('subdomain_placeholder', 'my-store')}
-            className="w-full bg-transparent px-4 py-3 text-sm focus:outline-none text-slate-800 font-medium placeholder:text-slate-400"
-          />
-          <span className="flex-shrink-0 text-xs font-semibold text-slate-500 border-l border-slate-200 px-4 py-3 bg-slate-50">
-            .{domainSuffix}
-          </span>
+      {/* The storefront that already exists on this name. */}
+      {currentSubdomain && !isEditing && (
+        <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 size={18} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-xs font-bold text-emerald-800">
+                {tVerif('store_ready_title', 'Your store is live')}
+              </p>
+              <a
+                href={storeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                dir="ltr"
+                className="block text-[13px] font-mono font-bold text-emerald-700 hover:underline break-all"
+              >
+                {currentSubdomain}.{domainSuffix}
+              </a>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className="w-full bg-white border-2 border-emerald-200 hover:border-emerald-300 text-emerald-700 font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+          >
+            <RefreshCw size={14} />
+            {tVerif('subdomain_btn_edit', 'Change store name')}
+          </button>
         </div>
+      )}
 
-        {checking && (
-          <p className="text-[11px] text-slate-600 flex items-center gap-1.5 px-1 font-medium">
-            <Loader2 size={12} className="animate-spin" />
-            {tVerif('subdomain_checking', 'Checking availability...')}
-          </p>
-        )}
-        {!checking && status === 'available' && (
-          <p className="text-[11px] text-emerald-600 font-semibold px-1">
-            ✓ {feedbackMessage}
-          </p>
-        )}
-        {!checking && (status === 'taken' || status === 'invalid' || status === 'reserved' || status === 'blocked') && (
-          <p className="text-[11px] text-rose-600 font-semibold px-1">
-            ⚠ {feedbackMessage}
-          </p>
-        )}
+      {isEditing && (
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-700">
+            {tVerif('subdomain_label', 'Choose your Subdomain name')}
+          </label>
+          <div className="relative flex items-center rounded-xl border-2 border-slate-200 bg-white focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all overflow-hidden">
+            <input
+              type="text"
+              value={subdomain}
+              dir="ltr"
+              onChange={(e) => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+/, '').slice(0, 30))}
+              disabled={saving}
+              placeholder={tVerif('subdomain_placeholder', 'my-store')}
+              className="w-full bg-transparent px-4 py-3 text-sm focus:outline-none text-slate-800 font-medium placeholder:text-slate-400"
+            />
+            <span className="flex-shrink-0 text-xs font-semibold text-slate-500 border-l border-slate-200 px-4 py-3 bg-slate-50" dir="ltr">
+              .{domainSuffix}
+            </span>
+          </div>
 
-        <p className="text-[11px] text-slate-500 px-1 pt-1 italic">
-          {tVerif('subdomain_suffix', 'Your links will look like: {subdomain}.silacod.ma/r/link-code').replace('{subdomain}', subdomain || 'your-store')}
-        </p>
-      </div>
+          {checking && (
+            <p className="text-[11px] text-slate-600 flex items-center gap-1.5 px-1 font-medium">
+              <Loader2 size={12} className="animate-spin" />
+              {tVerif('subdomain_checking', 'Checking availability...')}
+            </p>
+          )}
+          {!checking && status === 'available' && (
+            <p className="text-[11px] text-emerald-600 font-semibold px-1">
+              ✓ {feedbackMessage}
+            </p>
+          )}
+          {!checking && (status === 'taken' || status === 'invalid' || status === 'reserved' || status === 'blocked') && (
+            <p className="text-[11px] text-rose-600 font-semibold px-1">
+              ⚠ {feedbackMessage}
+            </p>
+          )}
 
-      {!user?.subdomain && (
-        <button
-          onClick={handleSave}
-          disabled={status !== 'available' || saving}
-          className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-primary-600/10 hover:shadow-primary-600/20 active:scale-[0.98] transition-all"
-        >
-          {saving ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          {tVerif('subdomain_btn_save', 'Confirm Subdomain')}
-        </button>
+          <p className="text-[11px] text-slate-500 px-1 pt-1 italic">
+            {tVerif('subdomain_suffix', 'Your links will look like: {subdomain}.silacod.ma/r/link-code').replace('{subdomain}', subdomain || 'your-store')}
+          </p>
+
+          {currentSubdomain && (
+            <p className="text-[11px] text-amber-600 font-semibold px-1 pt-1">
+              {tVerif('subdomain_rename_warning', 'Renaming moves your store to the new address — links using the old one will stop working.')}
+            </p>
+          )}
+
+          <div className="flex items-center gap-2 pt-2">
+            {currentSubdomain && (
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={saving}
+                className="flex-shrink-0 bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-600 font-bold text-sm py-3 px-5 rounded-xl active:scale-[0.98] transition-all disabled:opacity-50"
+              >
+                {tVerif('subdomain_btn_cancel', 'Cancel')}
+              </button>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={status !== 'available' || saving}
+              className="flex-1 bg-primary-600 hover:bg-primary-700 text-white font-bold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-primary-600/10 hover:shadow-primary-600/20 active:scale-[0.98] transition-all"
+            >
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {tVerif('subdomain_btn_save', 'Confirm Subdomain')}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1261,7 +1346,7 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-4 sm:py-8 font-['29LT_Kaff',_Cairo,_Inter,_sans-serif]" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+    <div className="max-w-4xl mx-auto font-['29LT_Kaff',_Cairo,_Inter,_sans-serif]" dir={language === 'ar' ? 'rtl' : 'ltr'}>
 
       {/* ── Header ── */}
       {!hideHeader && (
@@ -1334,9 +1419,16 @@ export default function ProfileVerification({ hideHeader = false }: { hideHeader
           const Icon = step.icon;
           const isExpanded = expandedStep === step.id;
           
-          // Bank step is always expandable to allow adding more methods
+          // Bank step is always expandable to allow adding more methods.
+          // The store name is too: registration now sets it, so it arrives here
+          // already COMPLETED, and this step is where a seller comes to change
+          // the name they picked on the sign-up form.
           // Identity and Email are expandable if pending/rejected
-          const canExpand = step.key === 'bank' || status === 'PENDING' || status === 'REJECTED';
+          const canExpand =
+            step.key === 'bank' ||
+            step.key === 'subdomain' ||
+            status === 'PENDING' ||
+            status === 'REJECTED';
 
           return (
             <div

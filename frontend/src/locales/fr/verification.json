@@ -12,7 +12,6 @@
   "subdomain_btn_save": "Confirmer le sous-domaine",
   "subdomain_toast_success": "Sous-domaine configuré avec succès !",
   "subdomain_toast_error": "Échec de l'enregistrement du sous-domaine.",
-
   "email_title": "Vérification Email",
   "email_desc": "Confirmez votre adresse email : {email}",
   "email_notice_to_send": "Nous allons envoyer un code de vérification à :",
@@ -28,7 +27,6 @@
   "email_toast_invalid": "Code invalide ou expiré",
   "email_toast_length": "Le code doit contenir 6 chiffres",
   "email_toast_error_send": "Erreur lors de l'envoi",
-
   "identity_title": "Vérification d'Identité",
   "identity_desc": "Vérifiez votre identité en fournissant les documents requis (CIN ou Passeport)",
   "identity_rejected": "Votre vérification d'identité a été rejetée",
@@ -71,7 +69,6 @@
   "identity_toast_addr_req": "L'adresse est requise",
   "identity_toast_success": "Documents et informations soumis avec succès !",
   "identity_toast_error": "Erreur lors de la soumission",
-
   "bank_title": "Méthode de Paiement Bancaire",
   "bank_desc": "Ajoutez au moins une méthode de paiement bancaire (RIB)",
   "bank_methods_title": "Vos méthodes de paiement",
@@ -93,7 +90,6 @@
   "bank_toast_success": "Compte bancaire ajouté avec succès !",
   "bank_toast_invalid_otp": "Code incorrect ou expiré",
   "bank_toast_error_send": "Erreur lors de l'envoi du code",
-
   "contract_title": "Contrat & Engagement",
   "contract_desc": "Prenez connaissance de nos conditions et signez votre contrat",
   "contract_preview_title": "Aperçu de votre contrat",
@@ -111,40 +107,34 @@
   "contract_toast_open_new": "Veuillez signer le document dans la nouvelle fenêtre.",
   "contract_toast_fail_link": "Impossible de générer le lien de signature.",
   "contract_toast_error": "Erreur lors de la préparation du contrat",
-
   "contract_general_title": "4. Clause commune à tous les utilisateurs (Général)",
   "contract_general_subtitle": "Sécurité et Propriété Intellectuelle :",
   "contract_general_p1": "• Tous les logiciels, systèmes et l'intelligence artificielle exploitant la plateforme sont la propriété exclusive de Silacod.",
   "contract_general_p2": "• En utilisant la plateforme, vous acceptez la signature numérique des contrats et reçus via le service intégré DamaneSign, ces signatures étant légalement contraignantes.",
   "contract_general_p3": "• Tous les litiges commerciaux sont régis par la loi marocaine, et la compétence exclusive est attribuée aux tribunaux de la ville de Casablanca.",
-
   "contract_vendor_title": "1. Pour les grossistes (Wholesalers)",
   "contract_vendor_subtitle": "Conditions d'offre et d'approvisionnement :",
   "contract_vendor_p1": "• Le grossiste s'engage à ce que tous les produits présentés soient authentiques et conformes aux photos et descriptions fournies.",
   "contract_vendor_p2": "• L'état des stocks doit être mis à jour périodiquement ; la plateforme n'est pas responsable des commandes passées sur des produits indisponibles.",
   "contract_vendor_p3": "• Le commerçant reconnaît sa responsabilité légale entière pour la qualité du produit et ses vices cachés conformément à la loi marocaine.",
   "contract_vendor_p4": "• Les cotisations du commerçant sont perçues après confirmation de la réception du produit par le client final et expiration du délai légal de rétractation.",
-
   "contract_influencer_title": "2. Pour les influenceurs (Influencers)",
   "contract_influencer_subtitle": "Charte de promotion et commission :",
   "contract_influencer_p1": "• L'influenceur s'engage à promouvoir les produits de manière professionnelle et à ne pas faire de fausses promesses aux consommateurs.",
   "contract_influencer_p2": "• Tous les contenus marketing (images/vidéos) fournis par la plateforme sont protégés par la propriété intellectuelle, et leur utilisation n'est autorisée que dans le cadre des campagnes Silacod.",
   "contract_influencer_p3": "• Les produits sélectionnés (Claimed) n'apparaissent sur le compte de l'influenceur qu'après examen et acceptation par l'équipe de support technique de la plateforme.",
   "contract_influencer_p4": "• Les commissions sont calculées sur la base des ventes réalisées et effectivement payées, et sont versées selon le calendrier spécifié dans le tableau de bord.",
-
   "contract_seller_title": "3. Pour les vendeurs (Sellers)",
   "contract_seller_subtitle": "Gestion des ventes et des commandes :",
   "contract_seller_p1": "• Le \"Vendeur\" reconnaît que son rôle se limite uniquement à la commercialisation et à la vente des produits disponibles dans les entrepôts de la plateforme/des fournisseurs, et qu'il n'a pas le droit d'ajouter des produits externes.",
   "contract_seller_p2": "• Toutes les commandes déposées font l'objet d'un audit par l'administration de la plateforme avant d'être envoyées à la société de transport.",
   "contract_seller_p3": "• Le vendeur s'engage à protéger la confidentialité des données des clients (Leads) et à ne pas les utiliser en dehors du cadre de la réalisation du processus de vente via la plateforme, conformément aux lois de la CNDP.",
   "contract_seller_p4": "• Toute tentative de manipulation du système ou de contournement des commissions entraînera la suspension immédiate du compte.",
-
   "status_completed": "Terminé",
   "status_in_progress": "En cours de vérification",
   "status_pending": "En attente",
   "status_rejected": "Rejeté",
   "status_locked": "Verrouillé",
-
   "header_title": "Prêt à débloquer votre potentiel ?",
   "header_subtitle": "Complétez ces étapes de vérification pour accéder à toutes les fonctionnalités de la plateforme",
   "header_warning": "Vous ne pourrez pas effectuer d'actions importantes tant que votre profil n'est pas vérifié",
@@ -157,5 +147,9 @@
   "step_in_progress_title": "Documents en cours de vérification",
   "step_in_progress_desc": "Notre équipe examine vos documents. Vous serez notifié dès la validation (généralement sous 24-48h).",
   "profile_verified_success_title": "Profil entièrement vérifié !",
-  "profile_verified_success_desc": "Vous avez maintenant accès à toutes les fonctionnalités de la plateforme."
+  "profile_verified_success_desc": "Vous avez maintenant accès à toutes les fonctionnalités de la plateforme.",
+  "store_ready_title": "Votre boutique est en ligne",
+  "subdomain_btn_edit": "Modifier le nom de la boutique",
+  "subdomain_btn_cancel": "Annuler",
+  "subdomain_rename_warning": "Renommer déplace votre boutique vers la nouvelle adresse — les liens utilisant l'ancienne cesseront de fonctionner."
 }

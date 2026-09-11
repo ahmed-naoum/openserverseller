@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { swal } from '../../components/ui/SweetAlert';
 
 type SecretSource = 'database' | 'env' | 'unset';
 
@@ -132,9 +133,11 @@ export default function AdminSecrets() {
 
   const handleReset = async (item: SecretItem) => {
     if (
-      !window.confirm(
-        `Réinitialiser ${item.label} ?\n\nLa valeur enregistrée sera supprimée et l'application utilisera de nouveau la valeur du fichier .env.`
-      )
+      !(await swal.warn({
+        title: `Réinitialiser ${item.label} ?`,
+        text: "La valeur enregistrée sera supprimée et l'application utilisera de nouveau la valeur du fichier .env.",
+        confirmText: 'Réinitialiser',
+      }))
     ) {
       return;
     }

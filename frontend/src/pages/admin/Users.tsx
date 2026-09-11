@@ -52,6 +52,7 @@ import {
   Plus
 } from 'lucide-react';
 import { fetchAllUsers } from '../../lib/apiPaging';
+import { swal } from '../../components/ui/SweetAlert';
 
 /**
  * Blocks or unblocks one account's ability to connect its own domain.
@@ -68,14 +69,16 @@ function CustomDomainToggle({ user, mutation }: { user: any; mutation: any }) {
   const allowed = user.customDomainEnabled !== false;
   const pending = mutation.isPending && mutation.variables?.uuid === user.uuid;
 
-  const toggle = () => {
+  const toggle = async () => {
     if (pending) return;
     if (allowed) {
-      const ok = window.confirm(
-        user.customDomain
-          ? `Bloquer les domaines personnalisés pour ce compte ?\n\n${user.customDomain} sera libéré immédiatement et cessera de servir les pages.`
-          : 'Bloquer les domaines personnalisés pour ce compte ?'
-      );
+      const ok = await swal.warn({
+        title: 'Bloquer les domaines personnalisés pour ce compte ?',
+        text: user.customDomain
+          ? `${user.customDomain} sera libéré immédiatement et cessera de servir les pages.`
+          : undefined,
+        confirmText: 'Bloquer',
+      });
       if (!ok) return;
     }
     mutation.mutate({ uuid: user.uuid, enabled: !allowed });
@@ -3076,7 +3079,7 @@ export default function AdminUsers() {
                             </button>
                           )}
                           <button
-                            onClick={() => { if (window.confirm('Réinitialiser la 2FA ?')) reset2FAMutation.mutate(user.uuid); }}
+                            onClick={async () => { if (await swal.warn({ title: 'Réinitialiser la 2FA ?', text: "L'utilisateur devra reconfigurer son authentification à deux facteurs.", confirmText: 'Réinitialiser' })) reset2FAMutation.mutate(user.uuid); }}
                             className="py-2 px-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-100 transition-all flex items-center justify-center shrink-0"
                             title="Reset 2FA"
                           >
@@ -3306,8 +3309,8 @@ export default function AdminUsers() {
 
                             <div className="flex gap-1">
                               <button
-                                onClick={() => {
-                                  if (window.confirm('Voulez-vous vraiment désactiver la 2FA pour cet utilisateur ?')) {
+                                onClick={async () => {
+                                  if (await swal.warn({ title: 'Désactiver la 2FA ?', text: 'Voulez-vous vraiment désactiver la 2FA pour cet utilisateur ?', confirmText: 'Désactiver' })) {
                                     reset2FAMutation.mutate(user.uuid);
                                   }
                                 }}

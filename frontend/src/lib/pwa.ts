@@ -1,12 +1,18 @@
 import { registerSW } from 'virtual:pwa-register';
+import { swal } from '../components/ui/SweetAlert';
 
 export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     const updateSW = registerSW({
-      onNeedRefresh() {
-        if (confirm('Une nouvelle version est disponible. Recharger ?')) {
-          updateSW(true);
-        }
+      async onNeedRefresh() {
+        const ok = await swal.confirm({
+          type: 'info',
+          title: 'Nouvelle version disponible',
+          text: "Recharger pour mettre l'application à jour ?",
+          confirmText: 'Recharger',
+          cancelText: 'Plus tard',
+        });
+        if (ok) updateSW(true);
       },
       onOfflineReady() {
         console.log('App ready to work offline');

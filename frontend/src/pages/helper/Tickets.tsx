@@ -39,6 +39,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
 import toast from 'react-hot-toast';
 import PageLoader from '../../components/PageLoader';
+import { SweetAlertCard } from '../../components/ui/SweetAlert';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -278,51 +279,19 @@ function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-      if (e.key === 'Enter') onConfirm();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onConfirm, onCancel]);
-
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full p-8 animate-in zoom-in-95 duration-200">
-        <div
-          className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-5 ${
-            tone === 'danger' ? 'bg-red-50 text-red-500' : 'bg-primary-50 text-primary-600'
-          }`}
-        >
-          {tone === 'danger' ? <AlertTriangle size={26} /> : <Truck size={26} />}
-        </div>
-        <h3 className="text-xl font-black text-slate-900 mb-2">{title}</h3>
-        <p className="text-sm text-slate-500 font-medium leading-relaxed mb-8">{message}</p>
-        <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 px-5 py-3 rounded-2xl bg-slate-100 text-slate-600 font-black text-sm hover:bg-slate-200 transition-all active:scale-95"
-          >
-            Annuler
-          </button>
-          <button
-            onClick={onConfirm}
-            autoFocus
-            className={`flex-1 px-5 py-3 rounded-2xl text-white font-black text-sm transition-all active:scale-95 shadow-lg ${
-              tone === 'danger'
-                ? 'bg-red-500 hover:bg-red-600 shadow-red-200'
-                : 'bg-slate-900 hover:bg-black shadow-slate-200'
-            }`}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+    <SweetAlertCard
+      open={open}
+      type={tone === 'danger' ? 'danger' : 'question'}
+      icon={tone === 'danger' ? undefined : <Truck size={34} />}
+      title={title}
+      text={message}
+      confirmText={confirmLabel}
+      cancelText="Annuler"
+      focus="confirm"
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }
 

@@ -547,7 +547,7 @@ export default function AbandonedCarts() {
   );
 
   return (
-    <div className="p-2 sm:p-6 max-w-[1200px] mx-auto space-y-6">
+    <div className="max-w-[1200px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-3xl border border-gray-100 shadow-xs">
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">

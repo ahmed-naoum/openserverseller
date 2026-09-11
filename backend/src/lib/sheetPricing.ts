@@ -22,6 +22,44 @@ const num = (key: string, fallback: number): number => {
 /** Cents charged per lead written. $0.05 by default. */
 export const LEAD_PRICE_CENTS = num('SHEET_LEAD_PRICE_CENTS', 5);
 
+/**
+ * What one ABANDONED CART costs to write into a seller's Google Sheet.
+ *
+ * Priced below a real lead, and priced by how it was sent, because the two are
+ * not the same product. A cart is a phone number the customer never confirmed:
+ * it is worth less, it converts worse, and a seller who leaves the automatic
+ * stream on is handing us predictable volume, so it is charged 2c. Pushing one
+ * by hand from the carts page is a deliberate, one-off recovery and is charged
+ * the full 5c a lead costs.
+ *
+ * NOT applied to ordinary leads — those stay on LEAD_PRICE_CENTS whichever way
+ * they reach the sheet. The discriminator is the lead's own `source`
+ * ('ABANDONED_CART') combined with the push job's `origin`, both of which are
+ * already columns; nothing new is stored to decide a price.
+ *
+ * The reservation gate (services/leadCredits.service.ts) deliberately keeps
+ * reserving at the full LEAD_PRICE_CENTS for every lead, carts included. It is
+ * a visibility lock, and reserving MORE than we later charge can only ever
+ * leave a seller with credit to spare — the opposite mistake would let the
+ * balance be overdrawn by rows the gate had already promised were affordable.
+ */
+export const CART_PRICE_AUTO_CENTS = num('SHEET_CART_PRICE_AUTO_CENTS', 2);
+export const CART_PRICE_MANUAL_CENTS = num('SHEET_CART_PRICE_MANUAL_CENTS', 5);
+
+/** A lead's source, as far as pricing is concerned. */
+export const ABANDONED_CART_SOURCE = 'ABANDONED_CART';
+
+/**
+ * The tariff for one row, in cents.
+ *
+ * A pack-covered row never reaches this — `chargeCredits` books those at zero
+ * against the subscription — so this is only ever the cents tariff.
+ */
+export function priceCentsFor(source: string | null | undefined, origin: string | null | undefined): number {
+  if (source !== ABANDONED_CART_SOURCE) return LEAD_PRICE_CENTS;
+  return origin === 'AUTO' ? CART_PRICE_AUTO_CENTS : CART_PRICE_MANUAL_CENTS;
+}
+
 /** The currency the amounts are denominated in, for display. */
 export const CURRENCY_SYMBOL = '$';
 

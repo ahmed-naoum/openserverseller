@@ -28,7 +28,9 @@ export default defineConfig({
          * who have visited before, which makes it look like it works in a
          * private window and nowhere else.
          */
-        navigateFallbackDenylist: [/^\/r\//]
+        // APKs must be fetched as files, never replaced by the offline SPA shell.
+        globIgnores: ['**/downloads/**'],
+        navigateFallbackDenylist: [/^\/r\//, /^\/downloads\//]
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
@@ -117,6 +119,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // The block registry, shared with the backend. It lives under the
+      // backend's src so its `tsc` build picks it up unchanged; the frontend
+      // reaches it through this alias. Pure TypeScript and zod only — see
+      // backend/src/shared/blocks/define.ts.
+      '@shared': path.resolve(__dirname, '../backend/src/shared'),
     },
   },
   // Used by scripts/prerender.mjs, which serves the built site locally and
@@ -136,7 +143,9 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,
     port: 5173,
+    cors: true,
     proxy: {
       /**
        * Compiled landing pages, opt-in via VITE_SSG_PROXY=1.

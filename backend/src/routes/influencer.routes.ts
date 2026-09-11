@@ -3,6 +3,9 @@ import { body, validationResult } from 'express-validator';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { ipOrderCountsFor, fraudThreshold } from '../lib/leadFraud.js';
+import { addVendorBan, removeVendorBan, bannedValuesFor } from '../lib/vendorIpBan.js';
+import { normalizeBanValue, isValidBanValue } from '../lib/ipBan.js';
 import { v4 as uuidv4 } from 'uuid';
 import { io } from '../index.js';
 import { containsBlockedWord } from '../utils/blockedWords.js';
@@ -31,6 +34,7 @@ import { resolveServerCloak, getCloakingConfig } from '../services/landingCompil
 import { validateLandingPageUpdate } from '../validations/landingPage.validation.js';
 import { invalidate, compileNow } from '../services/landingCompiler/index.js';
 import { mode } from './landing.routes.js';
+import { flatBlocks } from '../shared/document/migrate.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -968,6 +972,82 @@ router.delete(
   })
 );
 
+// ─── Seller-scoped IP ban, raised from the leads screen ──────────────────────
+//
+// Addressed by LEAD, never by address: the seller's screen shows a ban toggle
+// and no IP at all, and the server reads the address off the lead. That keeps
+// visitors' addresses out of sellers' browsers and makes it impossible to ban a
+// neighbouring address by hand.
+//
+// The ban only covers this seller's own pages — see lib/vendorIpBan.ts for why
+// it is a different table from the admin blocklist that 403s the whole platform.
+const loadOwnLeadForBan = async (req: Request, rawId: string | undefined) => {
+  const leadId = parseInt(String(rawId));
+  if (!Number.isInteger(leadId)) throw new AppException(400, 'Invalid lead id');
+
+  const userId = req.user!.id;
+  // vendorId, not the referral link: banning is the lead OWNER's call. An
+  // affiliate sees the same row in their list but must not be able to shut the
+  // seller's pages to that customer.
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, vendorId: userId },
+    select: { id: true, vendorId: true, ipAddress: true },
+  });
+  if (!lead) throw new AppException(404, 'Lead introuvable ou hors de votre compte');
+
+  // Only landing-page and store checkouts record one. A lead imported from a
+  // CSV, a sheet or WhatsApp has nothing to ban.
+  if (!lead.ipAddress || !isValidBanValue(lead.ipAddress)) {
+    throw new AppException(400, "Ce lead n'a pas d'adresse réseau exploitable — rien à bloquer.");
+  }
+  return { ...lead, ipAddress: lead.ipAddress as string };
+};
+
+router.post(
+  '/leads/:id/ip-ban',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const lead = await loadOwnLeadForBan(req, req.params.id as string);
+
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 200) : '';
+    const ban = await addVendorBan({
+      vendorId: lead.vendorId,
+      value: lead.ipAddress,
+      reason: reason || `Bloqué depuis la commande #${lead.id}`,
+      leadId: lead.id,
+      // The human who clicked, which for a sub-account is the sub-account and
+      // not the parent vendor sitting in `user.id`.
+      createdById: req.user!.actorId ?? req.user!.id,
+      createdByEmail: req.user!.actorEmail ?? req.user!.email ?? null,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Ce client ne pourra plus commander sur vos pages.',
+      data: { leadId: lead.id, banId: ban.id, ipBanned: true },
+    });
+  })
+);
+
+router.delete(
+  '/leads/:id/ip-ban',
+  authenticate,
+  authorize('VENDOR', 'INFLUENCER'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const lead = await loadOwnLeadForBan(req, req.params.id as string);
+    const removed = await removeVendorBan(lead.vendorId, lead.ipAddress);
+
+    res.json({
+      status: 'success',
+      message: removed
+        ? 'Ce client peut à nouveau commander sur vos pages.'
+        : "Ce client n'était pas bloqué.",
+      data: { leadId: lead.id, ipBanned: false },
+    });
+  })
+);
+
 router.post(
   '/leads/delete/bulk',
   authenticate,
@@ -1384,7 +1464,7 @@ function trimLandingStructure(landingPage: any, cache: Map<number, any>) {
     let trimmed: any = null;
     try {
       const structure = landingPage.customStructure;
-      const blocks = Array.isArray(structure) ? structure : structure.blocks || [];
+      const blocks = flatBlocks(structure);
       const checkout = blocks.find((b: any) => b?.type === 'express_checkout');
       trimmed = checkout ? { blocks: [checkout] } : null;
     } catch {
@@ -1412,7 +1492,7 @@ function extractPackOptions(landingPage: any): { id: string | number | null; nam
   if (!landingPage?.customStructure) return null;
   try {
     const structure = landingPage.customStructure;
-    const blocks = Array.isArray(structure) ? structure : structure.blocks || [];
+    const blocks = flatBlocks(structure);
     const checkout = blocks.find((b: any) => b?.type === 'express_checkout');
     const options = checkout?.content?.options;
     if (!Array.isArray(options)) return null;
@@ -1635,6 +1715,10 @@ router.get(
                     // a product this account only affiliates for is not theirs
                     // to unlock. The heavy branch below gets it from `include`.
                     vendorId: true,
+                    // Read by the fraud/ban pass below and deleted again before
+                    // the response is written — a seller's browser never sees an
+                    // address (see that pass for why).
+                    ipAddress: true,
                     // The pack the customer picked. The order carries its own
                     // `productVariant` copy, which an agent may have retyped on
                     // the delivery form — these four are what the landing page
@@ -1875,7 +1959,10 @@ router.get(
         // Lead.confirmedPriceMad from the collected draft — then a
         // customer-requested price, so the Montant column is not blank for a
         // lead (WhatsApp / manual / sheet) that never became an order.
-        totalAmountMad: (lead as any).order?.totalAmountMad || lead.confirmedPriceMad || lead.requestedPriceMad || 0,
+        // A store checkout prices the whole basket up front and stores it on
+        // the lead (Lead.totalAmountMad); it sits right after the order total
+        // so the Montant column is not 0 for a basket that has a price.
+        totalAmountMad: (lead as any).order?.totalAmountMad || (lead as any).totalAmountMad || lead.confirmedPriceMad || lead.requestedPriceMad || 0,
         coliatyPackageCode: (lead as any).order?.coliatyPackageCode,
         coliatyPackageId: (lead as any).order?.coliatyPackageId,
         statusHistory: summaryOnly ? [] : ((lead as any).order?.statusHistory || []),
@@ -1900,6 +1987,11 @@ router.get(
           requestedPriceMad: lead.requestedPriceMad,
           requestedPriceStatus: lead.requestedPriceStatus,
           source: lead.source,
+          // A store checkout has no referral link to resolve a product
+          // through: the basket the customer built is on the lead itself, and
+          // the list draws its Produit cell (name, image, quantity) from it.
+          cartItems: Array.isArray((lead as any).cartItems) ? (lead as any).cartItems : null,
+          storeId: (lead as any).storeId ?? null,
         }
       }
     }));
@@ -1956,6 +2048,54 @@ router.get(
     // lookup. Done here rather than in the two mappers above: a number that is
     // still real anywhere in this handler is a number that can be shipped.
     await maskLockedLeads(gateVendorId, combined as any[], ORDER_ROW_MASK);
+
+    // Fraud signal and the seller's own IP blocklist, in two queries for the
+    // whole page rather than two per row.
+    //
+    // The address itself is deliberately not part of the answer, and is deleted
+    // from the rows that carried it here. A seller has no use for it: they ban
+    // "the customer behind this order" by lead id (POST /leads/:id/ip-ban) and
+    // the server reads the IP off the lead. Shipping it would put a visitor's
+    // address in every seller's browser to no end, and invite a hand-typed ban
+    // on a neighbouring address that belongs to someone else.
+    {
+      const ipByLead = new Map<number, { ip: string | null; createdAt: Date }>();
+      for (const l of leads as any[]) {
+        ipByLead.set(l.id, { ip: l.ipAddress ?? null, createdAt: l.createdAt });
+      }
+      for (const c of commissions as any[]) {
+        const cl = c.order?.lead;
+        if (cl?.id) ipByLead.set(cl.id, { ip: cl.ipAddress ?? null, createdAt: cl.createdAt });
+      }
+
+      const refs = [...ipByLead.entries()]
+        .filter(([, v]) => v.ip)
+        .map(([id, v]) => ({ id, ipAddress: v.ip, createdAt: v.createdAt }));
+
+      const [counts, bannedValues, threshold] = await Promise.all([
+        ipOrderCountsFor(refs),
+        bannedValuesFor(userId, refs.map((r) => r.ipAddress)),
+        fraudThreshold(),
+      ]);
+
+      for (const row of combined as any[]) {
+        const rowLead = row.order?.lead;
+        if (!rowLead?.id) continue;
+        const ip = ipByLead.get(rowLead.id)?.ip || null;
+        const count = ip ? counts.get(rowLead.id) || 0 : 0;
+
+        rowLead.ipOrderCount = count;
+        rowLead.ipSuspect = threshold > 0 && count >= threshold;
+        rowLead.ipBanned = !!ip && bannedValues.has(normalizeBanValue(ip));
+        // Only the account that OWNS the lead may ban for it. An affiliate
+        // whose link produced the order must not be able to close the seller's
+        // pages to that customer — the seller's other traffic is not theirs.
+        rowLead.canBanIp = !!ip && rowLead.vendorId === userId;
+
+        delete rowLead.ipAddress;
+        delete rowLead.userAgent;
+      }
+    }
 
     // When we fetched everything, the array itself is the exact answer (already deduped).
     const total = fetchAll ? combined.length : totalCommissions + totalLeads;

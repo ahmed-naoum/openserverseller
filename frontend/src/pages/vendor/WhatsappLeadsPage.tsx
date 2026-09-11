@@ -23,6 +23,7 @@ import {
   type CollectedLead,
 } from '../../lib/waAgentApi';
 import { useDebounce } from '../../hooks/utils';
+import PageHeader from '../../components/common/PageHeader';
 
 /**
  * Everything the agent has collected, as one table.
@@ -432,36 +433,38 @@ export default function WhatsappLeadsPage() {
   return (
     <div className="flex flex-col gap-4 pb-24">
       {/* ── Header ───────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Leads collectés</h1>
-          <p className="text-xs font-medium text-gray-500 mt-1">
+      <PageHeader
+        icon={ClipboardList}
+        title="Leads collectés"
+        subtitle={
+          <>
             Tout ce que votre agent a recueilli sur WhatsApp. Créer un lead à partir d&apos;une fiche
             est une action facturée.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 sm:ms-auto">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-[10px] font-black uppercase tracking-widest text-gray-500 tabular-nums">
-            <ClipboardList className="w-3 h-3" />
-            {total} fiche{total > 1 ? 's' : ''}
-          </span>
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={exporting}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            title="Télécharger les fiches filtrées au format CSV"
-          >
-            {exporting ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Download className="w-3.5 h-3.5" />
-            )}
-            Exporter CSV
-          </button>
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-[10px] font-black uppercase tracking-widest text-gray-500 tabular-nums">
+              <ClipboardList className="w-3 h-3" />
+              {total} fiche{total > 1 ? 's' : ''}
+            </span>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={exporting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              title="Télécharger les fiches filtrées au format CSV"
+            >
+              {exporting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              Exporter CSV
+            </button>
+          </>
+        }
+      />
 
       {/* ── Filters ──────────────────────────────────────────────── */}
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 space-y-3">

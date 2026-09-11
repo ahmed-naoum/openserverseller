@@ -15,6 +15,7 @@ import { fetchAllPages } from '../../utils/paging';
 import {
   ReplayInputTimeline, ReplayInputTicks, type CapturedField,
 } from '../../components/common/ReplayInputTimeline';
+import { swal } from '../../components/ui/SweetAlert';
 
 interface CheckoutInfo { fullName?: string; phone?: string; city?: string; filled: number; completed: boolean; }
 interface SessionInfo { socketId: string; path: string; lastActive: number; checkout?: CheckoutInfo | null; }
@@ -596,7 +597,7 @@ export default function LiveStreamInspector() {
     if (target === 'checkouts') label = 'les paniers non validés';
     if (target === 'signups') label = 'les inscriptions non finalisées';
 
-    if (!window.confirm(`Voulez-vous vraiment purger ${label} ?`)) return;
+    if (!(await swal.danger({ title: 'Purger les données ?', text: `Voulez-vous vraiment purger ${label} ? Cette action est irréversible.`, confirmText: 'Purger' }))) return;
     setPurging(true);
     try {
       const res = await api.post('/admin/sessions/purge', { target });

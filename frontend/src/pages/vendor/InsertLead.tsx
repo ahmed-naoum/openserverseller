@@ -539,7 +539,7 @@ export default function VendorInsertLead() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-2 sm:px-4">
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header card */}
       <div className={`rounded-3xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden transition-all duration-500 ${
         currentMode === 'SELLER' 

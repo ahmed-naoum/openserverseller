@@ -9,7 +9,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { getIO } from '../index.js';
 import { uploadRateLimiter } from '../middleware/security.js';
-import { exec, spawn } from 'child_process';
+import { execFile, spawn } from 'child_process';
 
 const router = Router();
 
@@ -164,9 +164,9 @@ const convertToMp3 = (inputPath: string): Promise<string> => {
     const mp3Filename = `${fileBase}.mp3`;
     const outputPath = path.join(dir, mp3Filename);
 
-    const cmd = `ffmpeg -y -i "${inputPath}" -vn -ar 44100 -ac 2 -b:a 192k "${outputPath}"`;
+    const args = ['-y', '-i', inputPath, '-vn', '-ar', '44100', '-ac', '2', '-b:a', '192k', outputPath];
     
-    exec(cmd, (error) => {
+    execFile('ffmpeg', args, (error) => {
       if (inputPath !== outputPath && fs.existsSync(inputPath)) {
         try {
           fs.unlinkSync(inputPath);
@@ -226,7 +226,11 @@ router.post(
   '/product-images',
   authenticate,
   uploadRateLimiter,
-  authorize('SUPER_ADMIN', 'ADMIN', 'GROSSELLER'),
+  // VENDOR and INFLUENCER are here because they own a shop: a seller cannot
+  // create a product for their own storefront without a photo of it. Same
+  // roles vendorStore.routes.ts admits, and the rate limiter above still
+  // applies.
+  authorize('SUPER_ADMIN', 'ADMIN', 'GROSSELLER', 'VENDOR', 'INFLUENCER'),
   productImageUpload.array('images', 10),
   asyncHandler(async (req, res) => {
     if (!req.files || (req.files as MulterFile[]).length === 0) {

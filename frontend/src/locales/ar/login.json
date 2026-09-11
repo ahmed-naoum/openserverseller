@@ -23,5 +23,8 @@
   "confirm_password_label": "تأكيد كلمة المرور",
   "passwords_dont_match": "كلمات المرور غير متطابقة",
   "password_update_success": "تم تحديث كلمة المرور وتسجيل الدخول بنجاح!",
-  "confirm_btn": "تأكيد"
+  "confirm_btn": "تأكيد",
+  "session_ended_logout": "تم تسجيل خروجك من علامة تبويب أخرى.",
+  "session_ended_expired": "انتهت صلاحية جلستك. يرجى تسجيل الدخول مرة أخرى.",
+  "session_ended_elsewhere": "تم تسجيل خروجك من جهاز آخر."
 }

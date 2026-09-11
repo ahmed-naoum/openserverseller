@@ -33,6 +33,7 @@ export type SubPermission =
   | 'subCanUseLinkBuilder'
   | 'subCanRegenerateLinks'
   | 'subCanViewMarketplace'
+  | 'subCanViewAbandonedCarts'
   | 'subCanViewWallet'
   | 'subCanViewTransactions'
   | 'subCanViewPayouts'
@@ -86,6 +87,12 @@ export const SUB_PERMISSION_GROUPS: { group: string; items: PermissionItem[] }[]
       { key: 'subCanEditProducts', label: 'Modifier les produits', hint: 'Fiches et branding vus par le client', requires: 'subCanViewInventory', sensitive: true },
       { key: 'subCanRequestCustomProduct', label: 'Demander un produit sur mesure', hint: 'Envoyer une demande de produit personnalisé', requires: 'subCanViewInventory' },
       { key: 'subCanViewMarketplace', label: 'Marché public', hint: 'Afficher le marketplace dans le menu (catalogue déjà public)' },
+      {
+        key: 'subCanViewAbandonedCarts',
+        label: 'Paniers abandonnés',
+        hint: "Voir les numéros saisis sur vos pages sans commande. L'envoi vers Sheets suit « Intégrations », l'envoi au call center « Pousser au call center », la suppression « Supprimer des leads ».",
+        sensitive: true,
+      },
     ],
   },
   {
@@ -165,6 +172,7 @@ const PAGE_PERMISSIONS: Record<string, SubPermission | null> = {
   '/woocommerce-leads': 'subCanViewIntegrations',
   '/google-sheets-leads': 'subCanViewIntegrations',
   '/marketplace': 'subCanViewMarketplace',
+  '/abandoned-carts': 'subCanViewAbandonedCarts',
   '/support': 'subCanManageSupport',
   '/chat': 'subCanUseChat',
   '/domains': 'subCanManageDomains',

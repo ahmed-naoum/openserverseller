@@ -12,6 +12,9 @@
  * never be allowed anywhere near it. A three-unit pack at 399 MAD is 399 MAD.
  */
 
+import { parseCartItems, cartTotalMad } from './leadCart.js';
+import { flatBlocks } from '../shared/document/migrate.js';
+
 /**
  * One entry of an express_checkout block's `content.options`, as the builder
  * stores it. Everything is optional and untyped because this comes out of the
@@ -76,8 +79,11 @@ export const findPackOption = (lead: any): PackOption | null => {
     }
   }
 
-  const blocks = Array.isArray(structure) ? structure : structure?.blocks;
-  if (!Array.isArray(blocks)) return null;
+  // Any of the three stored shapes, including the version 3 tree — a tree
+  // carries `root`, not `blocks`, and reading it here as empty would price
+  // every lead from such a page at retail.
+  const blocks = flatBlocks(structure);
+  if (!blocks.length) return null;
 
   // EVERY checkout block, not just the first. Nothing stops a builder from
   // putting a second express_checkout further down the page, and pricing a lead
@@ -152,8 +158,9 @@ export const findPackOption = (lead: any): PackOption | null => {
  * Resolution order, most authoritative first:
  *   1. the order total — once an order exists, that is the money
  *   2. what the agent settled on during the confirmation call
- *   3. the pack/variant price from the landing page the lead came through
- *   4. the product's list price
+ *   3. the basket a store checkout captured, shipping included
+ *   4. the pack/variant price from the landing page the lead came through
+ *   5. the product's list price
  * Returns 0 when nothing is known.
  */
 export const getPackPrice = (lead: any): number => {
@@ -165,6 +172,15 @@ export const getPackPrice = (lead: any): number => {
   if (lead?.confirmedPriceMad !== undefined && lead?.confirmedPriceMad !== null) {
     return Number(lead.confirmedPriceMad);
   }
+
+  // A store basket, before an agent has confirmed it. This sits ABOVE the pack
+  // and retail tiers on purpose: those two answer "what does this product
+  // cost", and for a lead carrying three products that question has no single
+  // answer. Without this branch a basket falls through to one product's retail
+  // price — the figure the agent reads out on the call and the figure the
+  // Sheets export writes.
+  const cartLines = parseCartItems(lead);
+  if (cartLines.length) return cartTotalMad(lead, cartLines);
 
   const price = findPackOption(lead)?.price;
   // 0 is a price. The old truthiness check sent a legitimately-free pack — a

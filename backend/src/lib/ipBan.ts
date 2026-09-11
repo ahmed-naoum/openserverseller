@@ -31,8 +31,15 @@ export interface BanMatch {
   source: string;
 }
 
-/** Precompiled range so the per-request path never re-parses a CIDR string. */
-interface CompiledBan extends BanMatch {
+/**
+ * Precompiled range so the per-request path never re-parses a CIDR string.
+ *
+ * Exported, with the matcher below, because the seller-scoped blocklist in
+ * lib/vendorIpBan.ts has to agree with this one down to the last edge case —
+ * ::ffff: prefixes, sloppy CIDR host bits, v4-vs-v6 — and a second parser would
+ * only mean two sets of those bugs.
+ */
+export interface CompiledValue {
   /** Set for an exact address ban. */
   exact: string | null;
   /** Set for a CIDR ban: the network bits as a BigInt, plus the mask width. */
@@ -41,6 +48,8 @@ interface CompiledBan extends BanMatch {
   /** 4 or 6 — a v4 ban can never match a v6 address, so this short-circuits. */
   family: 4 | 6 | 0;
 }
+
+interface CompiledBan extends BanMatch, CompiledValue {}
 
 let cache: CompiledBan[] | null = null;
 let cacheExpiresAt = 0;
@@ -127,16 +136,18 @@ function toBigInt(addr: string, family: 4 | 6): bigint | null {
   }
 }
 
-function compile(row: { id: number; value: string; reason: string | null; source: string }): CompiledBan | null {
-  const v = normalizeBanValue(row.value);
+/**
+ * Turn a stored ban value into something matchable, or null when it is junk
+ * that could never match anything.
+ */
+export function compileValue(rawValue: string): CompiledValue | null {
+  const v = normalizeBanValue(rawValue);
   const [addr, prefix] = v.split('/');
   const family = familyOf(addr);
   if (!family) return null;
 
-  const base: BanMatch = { id: row.id, value: row.value, reason: row.reason, source: row.source };
-
   if (prefix === undefined) {
-    return { ...base, exact: v, net: null, bits: 0, family };
+    return { exact: v, net: null, bits: 0, family };
   }
 
   const bits = Number(prefix);
@@ -147,7 +158,47 @@ function compile(row: { id: number; value: string; reason: string | null; source
   // Mask off the host bits once, here, so a sloppily written range like
   // 105.66.3.7/16 still matches everything in 105.66.0.0/16.
   const mask = bits === 0 ? 0n : ((1n << BigInt(bits)) - 1n) << BigInt(total - bits);
-  return { ...base, exact: null, net: n & mask, bits, family };
+  return { exact: null, net: n & mask, bits, family };
+}
+
+/**
+ * The first compiled ban in `list` covering `ip`, or null.
+ *
+ * The address is parsed at most once per call, and only if a range ban of the
+ * matching family is actually present — an exact-match-only list never touches
+ * BigInt at all.
+ */
+export function matchCompiled<T extends CompiledValue>(list: T[], ip: string | null): T | null {
+  if (!ip || !list.length) return null;
+
+  const v = normalizeBanValue(ip);
+  const family = familyOf(v);
+  let n: bigint | null = null;
+
+  for (const ban of list) {
+    if (ban.exact !== null) {
+      if (ban.exact === v) return ban;
+      continue;
+    }
+    if (!family || ban.family !== family) continue;
+
+    if (n === null) {
+      n = toBigInt(v, family);
+      if (n === null) return null;
+    }
+
+    const total = family === 4 ? 32 : 128;
+    const mask = ban.bits === 0 ? 0n : ((1n << BigInt(ban.bits)) - 1n) << BigInt(total - ban.bits);
+    if ((n & mask) === ban.net) return ban;
+  }
+
+  return null;
+}
+
+function compile(row: { id: number; value: string; reason: string | null; source: string }): CompiledBan | null {
+  const compiled = compileValue(row.value);
+  if (!compiled) return null;
+  return { id: row.id, value: row.value, reason: row.reason, source: row.source, ...compiled };
 }
 
 async function load(): Promise<CompiledBan[]> {
@@ -177,34 +228,7 @@ async function load(): Promise<CompiledBan[]> {
  */
 export async function findBan(ip: string | null): Promise<BanMatch | null> {
   if (!ip) return null;
-
-  const bans = await load();
-  if (!bans.length) return null;
-
-  const v = normalizeBanValue(ip);
-  const family = familyOf(v);
-  let n: bigint | null = null;
-
-  for (const ban of bans) {
-    if (ban.exact !== null) {
-      if (ban.exact === v) return ban;
-      continue;
-    }
-    if (!family || ban.family !== family) continue;
-
-    // Parsed at most once per request, and only if a range ban of the right
-    // family actually exists.
-    if (n === null) {
-      n = toBigInt(v, family);
-      if (n === null) return null;
-    }
-
-    const total = family === 4 ? 32 : 128;
-    const mask = ban.bits === 0 ? 0n : ((1n << BigInt(ban.bits)) - 1n) << BigInt(total - ban.bits);
-    if ((n & mask) === ban.net) return ban;
-  }
-
-  return null;
+  return matchCompiled(await load(), ip);
 }
 
 export interface BanInput {
@@ -267,7 +291,7 @@ export async function unbanIp(rawValue: string): Promise<boolean> {
  * repeat offender into a standing block.
  *
  * Guards, in order, because a false positive here refuses a real customer:
- *   * the feature is off unless a threshold is configured;
+ *   * the feature is off when the threshold is 0;
  *   * whitelisted addresses are never banned;
  *   * an address that is already banned is left alone, so an admin's permanent
  *     ban is not quietly downgraded to a 24-hour one;
@@ -279,7 +303,7 @@ export async function maybeAutoBanForOrders(ip: string | null, leadId: number): 
   const { fetchSecuritySettings } = await import('../middleware/security.js');
   const settings = await fetchSecuritySettings();
 
-  const threshold = settings.autoBanOrderThreshold;
+  const threshold = settings.fraudIpThreshold;
   if (!threshold || threshold <= 0) return;
   if (settings.whitelistedIPs.includes(ip)) return;
 
@@ -287,10 +311,10 @@ export async function maybeAutoBanForOrders(ip: string | null, leadId: number): 
   const existing = await prisma.bannedIp.findUnique({ where: { value } });
   if (existing) return;
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const count = await prisma.lead.count({
-    where: { ipAddress: ip, createdAt: { gte: since } },
-  });
+  // Shared with the SUSPECT badge on the leads screens, so an order that gets
+  // flagged there is exactly an order that would be banned here.
+  const { countRecentOrdersFromIp } = await import('./leadFraud.js');
+  const count = await countRecentOrdersFromIp(ip);
   if (count < threshold) return;
 
   const hours = settings.autoBanDurationHours;

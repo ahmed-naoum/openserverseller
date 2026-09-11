@@ -1,0 +1,415 @@
+/*
+ * Dashboard skin.
+ *
+ * Every page rendered inside the dashboard shell sits under `.sc-canvas`
+ * (see DashboardLayout). The pages were written over several years against
+ * different palettes (gray-*, slate-*, hard-coded hexes) and a loud
+ * typographic style — black weights, 8px capitals. These rules pull all of
+ * them onto the shell's language (frosted white surfaces on a soft gradient
+ * canvas, 600/700 weights, brand gradients on primary actions) without
+ * editing 160 files one by one.
+ *
+ * Scoped on purpose: the public site, auth pages and the storefront never
+ * carry `.sc-canvas`, so nothing here reaches them.
+ *
+ * Specificity note: every selector is `.sc-canvas` + one class/attribute,
+ * i.e. (0,2,0), which beats a Tailwind utility (0,1,0) and ties with a
+ * `hover:` utility — and this sheet is imported after globals.css, so it
+ * wins the tie. Do not add `!important`; there is no need.
+ *
+ * `backdrop-filter` is deliberately NOT used on page surfaces: it makes the
+ * element a containing block for `position: fixed` descendants, and many
+ * pages render their modals inline inside a card.
+ */
+
+.sc-canvas {
+  --sc-surface: rgba(255, 255, 255, 0.82);
+  --sc-surface-border: rgba(255, 255, 255, 0.9);
+  --sc-surface-shadow: 0 10px 40px -18px rgba(17, 19, 68, 0.28), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  --sc-navy: linear-gradient(135deg, #181a50 0%, #2c2f74 100%);
+  --sc-coral: linear-gradient(135deg, #f26342 0%, #f57853 100%);
+}
+
+/* ── 1. Page wrappers: let the gradient canvas show through ─────────────── */
+.sc-canvas > :where(.min-h-screen, .bg-gray-50, .bg-slate-50, .bg-gray-100, .bg-slate-100, [class*="bg-[#F8FAFC]"], [class*="bg-[#f8fafc]"]),
+.sc-canvas > * > :where(.min-h-screen, [class*="bg-[#F8FAFC]"], [class*="bg-[#f8fafc]"]) {
+  background-color: transparent;
+  background-image: none;
+  min-height: 0;
+}
+
+/* ── 2. Surfaces: white boxes become frosted cards ──────────────────────── */
+.sc-canvas :where(div, section, article, form, aside, li, header, footer, fieldset, nav)[class~="bg-white"]:where([class*="rounded-"]):where([class*="border-slate-"], [class*="border-gray-"], [class*="border-zinc-"], [class*="border-neutral-"], [class*="shadow"]) {
+  background-color: var(--sc-surface);
+  border-color: var(--sc-surface-border);
+  box-shadow: var(--sc-surface-shadow);
+}
+
+/* Anything that floats over other content stays OPAQUE. A translucent
+   surface is fine over the page canvas but not over text: dropdown menus,
+   popovers and modal panels would show the content behind them. Both the
+   floating element itself and any card nested inside one are covered. */
+.sc-canvas :where(.absolute, .fixed, .sticky)[class~="bg-white"],
+.sc-canvas :where(.absolute, .fixed, .sticky) :where(div, section, article, form, aside, li, header, footer, nav)[class~="bg-white"],
+.sc-canvas :where([role="dialog"], [role="menu"], [role="listbox"], dialog)[class~="bg-white"],
+.sc-canvas :where([role="dialog"], [role="menu"], [role="listbox"], dialog) :where(div, section, article, form)[class~="bg-white"] {
+  background-color: #fff;
+}
+
+/* Oversized radii from the previous style come down to the shell's 20px */
+.sc-canvas :where(div, section, article, form)[class*="rounded-3xl"],
+.sc-canvas :where(div, section, article, form)[class*="rounded-[2rem]"],
+.sc-canvas :where(div, section, article, form)[class*="rounded-[1.5rem]"],
+.sc-canvas :where(div, section, article, form)[class*="rounded-[1.75rem]"] {
+  border-radius: 1.25rem;
+}
+/* The gradient-border pattern (a 2px-padded wrapper around an inner panel):
+   the inner radius must stay smaller than the outer one it now shares, or the
+   inner corners poke through. */
+.sc-canvas :where(div, section)[class*="rounded-[22px]"],
+.sc-canvas :where(div, section)[class*="rounded-[24px]"] {
+  border-radius: 1.12rem;
+}
+
+/* Tinted info boxes keep their tint but drop the hard border */
+.sc-canvas :where(div)[class*="bg-emerald-50"][class*="border-emerald-"],
+.sc-canvas :where(div)[class*="bg-amber-50"][class*="border-amber-"],
+.sc-canvas :where(div)[class*="bg-rose-50"][class*="border-rose-"],
+.sc-canvas :where(div)[class*="bg-red-50"][class*="border-red-"],
+.sc-canvas :where(div)[class*="bg-blue-50"][class*="border-blue-"],
+.sc-canvas :where(div)[class*="bg-orange-50"][class*="border-orange-"],
+.sc-canvas :where(div)[class*="bg-indigo-50"][class*="border-indigo-"],
+.sc-canvas :where(div)[class*="bg-primary-50"][class*="border-primary-"] {
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+}
+
+/* Dark bars (bulk-action toolbars, hero tiles) become brand navy */
+.sc-canvas :where(div, section)[class~="bg-gray-900"],
+.sc-canvas :where(div, section)[class~="bg-slate-900"],
+.sc-canvas :where(div, section)[class~="bg-black"],
+.sc-canvas :where(div, section)[class~="bg-gray-800"],
+.sc-canvas :where(div, section)[class~="bg-slate-800"] {
+  background-image: var(--sc-navy);
+  box-shadow: 0 16px 40px -20px rgba(24, 26, 80, 0.6);
+}
+
+/* ── 3. Typography: the same words, calmer weights ──────────────────────── */
+.sc-canvas .font-black { font-weight: 600; }
+.sc-canvas .font-extrabold { font-weight: 600; }
+.sc-canvas .font-black:where(.text-lg, .text-xl, .text-2xl, .text-3xl, .text-4xl, .text-5xl, .text-6xl, [class*="text-[2"], [class*="text-[3"], [class*="text-[4"]),
+.sc-canvas .font-extrabold:where(.text-lg, .text-xl, .text-2xl, .text-3xl, .text-4xl, .text-5xl, .text-6xl) {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.sc-canvas h1 { font-weight: 700; letter-spacing: -0.015em; }
+.sc-canvas h2 { font-weight: 600; letter-spacing: -0.01em; }
+
+/* Nothing below 10px: 7–9px capitals were the old style's signature */
+.sc-canvas :where(.text-\[7px\], .text-\[7\.5px\], .text-\[8px\], .text-\[8\.5px\], .text-\[9px\], .text-\[9\.5px\]) {
+  font-size: 10px;
+}
+/* Capital labels get the shell's spacing */
+.sc-canvas :where(.uppercase):where(.tracking-widest, .tracking-wider, .tracking-\[0\.2em\], .tracking-\[0\.15em\]) {
+  letter-spacing: 0.12em;
+}
+
+/* ── 4. Actions: primary buttons carry the brand gradients ──────────────── */
+.sc-canvas :where(button, a)[class~="bg-orange-500"],
+.sc-canvas :where(button, a)[class~="bg-orange-600"],
+.sc-canvas :where(button, a)[class~="bg-accent-500"],
+.sc-canvas :where(button, a)[class~="bg-accent-600"],
+.sc-canvas :where(button, a)[class*="bg-[#ff5722]"],
+.sc-canvas :where(button, a)[class*="bg-[#FF5722]"],
+.sc-canvas :where(button, a)[class*="bg-[#f26342]"] {
+  background-image: var(--sc-coral);
+  border-color: transparent;
+  box-shadow: 0 8px 20px -10px rgba(242, 99, 66, 0.7);
+}
+.sc-canvas :where(button, a)[class~="bg-primary-600"],
+.sc-canvas :where(button, a)[class~="bg-primary-500"],
+.sc-canvas :where(button, a)[class~="bg-primary-700"],
+.sc-canvas :where(button, a)[class~="bg-indigo-600"],
+.sc-canvas :where(button, a)[class~="bg-indigo-500"],
+.sc-canvas :where(button, a)[class~="bg-gray-900"],
+.sc-canvas :where(button, a)[class~="bg-slate-900"],
+.sc-canvas :where(button, a)[class~="bg-black"] {
+  background-image: var(--sc-navy);
+  border-color: transparent;
+  box-shadow: 0 8px 20px -10px rgba(44, 47, 116, 0.7);
+}
+.sc-canvas :where(button, a)[class~="bg-orange-500"]:hover,
+.sc-canvas :where(button, a)[class~="bg-orange-600"]:hover,
+.sc-canvas :where(button, a)[class~="bg-accent-500"]:hover,
+.sc-canvas :where(button, a)[class*="bg-[#ff5722]"]:hover,
+.sc-canvas :where(button, a)[class*="bg-[#FF5722]"]:hover,
+.sc-canvas :where(button, a)[class~="bg-primary-600"]:hover,
+.sc-canvas :where(button, a)[class~="bg-primary-500"]:hover,
+.sc-canvas :where(button, a)[class~="bg-indigo-600"]:hover,
+.sc-canvas :where(button, a)[class~="bg-gray-900"]:hover,
+.sc-canvas :where(button, a)[class~="bg-slate-900"]:hover,
+.sc-canvas :where(button, a)[class~="bg-black"]:hover {
+  filter: brightness(1.06);
+}
+.sc-canvas :where(button, a)[class~="bg-orange-500"]:disabled,
+.sc-canvas :where(button, a)[class~="bg-primary-600"]:disabled {
+  filter: none;
+  box-shadow: none;
+}
+
+/* Secondary (white) buttons */
+.sc-canvas :where(button, a)[class~="bg-white"]:where([class*="border-gray-"], [class*="border-slate-"]) {
+  background-color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(203, 213, 225, 0.6);
+}
+.sc-canvas :where(button, a)[class~="bg-white"]:where([class*="border-gray-"], [class*="border-slate-"]):hover {
+  background-color: #fff;
+  border-color: rgba(148, 163, 184, 0.6);
+}
+
+/* ── 4b. Hover timing ───────────────────────────────────────────────────── */
+/*
+ * Pages carry ~30 hover targets set to 500–1000ms. At that length the surface
+ * is still moving well after the pointer has arrived, which reads as lag
+ * rather than polish. Capped to 180ms.
+ *
+ * Scoped to elements that actually declare a `hover:` utility, so genuine
+ * long-running transitions (progress fills, height reveals, carousels) keep
+ * their timing. Tailwind writes the pseudo-class into the class attribute
+ * verbatim, which is what makes this selectable.
+ */
+.sc-canvas [class*="hover:"]:where(.duration-500, .duration-700, .duration-1000) {
+  transition-duration: 180ms;
+}
+/* Same for the delay: a hover that waits before starting feels broken. */
+.sc-canvas [class*="hover:"]:where([class*="delay-"]) {
+  transition-delay: 0ms;
+}
+
+/* ── 5. Forms ───────────────────────────────────────────────────────────── */
+.sc-canvas :where(input, select, textarea):where([class*="border-gray-"], [class*="border-slate-"]) {
+  background-color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(203, 213, 225, 0.7);
+}
+.sc-canvas :where(input, select, textarea):where([class*="border-gray-"], [class*="border-slate-"]):focus {
+  background-color: #fff;
+  border-color: #6568a5;
+  box-shadow: 0 0 0 3px rgba(44, 47, 116, 0.12);
+  outline: none;
+}
+
+/* ── 6. Tables ──────────────────────────────────────────────────────────── */
+/* Only tables that never chose a header colour of their own. */
+.sc-canvas thead:not([class*="bg-"]) { background-color: rgba(248, 250, 252, 0.7); }
+.sc-canvas thead:not([class*="bg-"]) th { font-weight: 600; color: #64748b; }
+.sc-canvas tbody tr:hover > td { background-color: rgba(255, 255, 255, 0.55); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sidebar navigation — mode-tinted.
+
+   One accent drives hover, selection and the running border, and it
+   follows the workspace mode: coral in Affilié, brand navy in Vendeur —
+   the same colour as that mode's pill in the switch above. It is set as
+   a bare RGB triple on the <aside> (`--nav-accent: 242 99 66`) so every
+   rule below can pick its own alpha from the one value.
+
+   Deliberately NOT under `.sc-canvas`: that class scopes the page body,
+   and the sidebar sits outside it.
+   ═══════════════════════════════════════════════════════════════════════ */
+.sc-nav-item,
+.sc-nav-child {
+  border: 1px solid transparent;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.sc-nav-item:hover,
+.sc-nav-child:hover {
+  background-color: rgb(var(--nav-accent) / 0.07);
+  border-color: rgb(var(--nav-accent) / 0.3);
+}
+
+/* Selected: tinted fill and accent text. */
+.sc-nav-item[data-active='true'],
+.sc-nav-child[data-active='true'] {
+  background-color: rgb(var(--nav-accent) / 0.1);
+  color: rgb(var(--nav-accent));
+}
+.sc-nav-child[data-active='true'] {
+  border-color: rgb(var(--nav-accent) / 0.35);
+  font-weight: 600;
+}
+/* The faint rail the running light travels along. */
+.sc-nav-item[data-active='true'] {
+  border-color: rgb(var(--nav-accent) / 0.28);
+}
+
+/* The "snake": a bright arc of a conic gradient chasing around the edge.
+   The gradient fills the whole box, then a two-layer mask subtracts the
+   content box so only a 1px ring survives — that ring IS the border, and
+   turning the gradient's start angle sweeps the bright part around it.
+
+   `--sc-angle` is registered with @property so the browser knows it is an
+   <angle> and can interpolate it. An unregistered custom property is just
+   a string and would jump 0deg → 360deg in one step, with no motion.
+   Where @property is unsupported the static border above still shows and
+   nothing breaks.
+
+   `inset: -1px` puts the ring on the element's own 1px border rather than
+   inside it; the layer is inert to the pointer. */
+@property --sc-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.sc-nav-item[data-active='true']::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  /* A comet: a long faint tail winding up to a hard bright head, then a
+     sharp cut back to nothing. The hard stop at the head is what makes it
+     read as a moving object rather than a glow drifting around. */
+  background: conic-gradient(
+    from var(--sc-angle),
+    transparent 0deg 240deg,
+    rgb(var(--nav-accent) / 0.35) 300deg,
+    rgb(var(--nav-accent)) 348deg,
+    rgb(var(--nav-accent)) 356deg,
+    transparent 357deg 360deg
+  );
+  /* No `filter` here on purpose. A drop-shadow is a blur pass, and this
+     element repaints on EVERY frame — the blur was being recomputed 60
+     times a second. The head is drawn slightly wider and brighter below
+     instead, which costs nothing per frame.
+
+     `contain: paint` + a compositing layer keep that repaint to this
+     element. Without them the repaint dirties the sidebar, whose
+     `backdrop-blur` would then re-run the blur over the whole rail on
+     every frame — the actual source of the stutter. */
+  contain: paint;
+  transform: translateZ(0);
+  will-change: opacity;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  /* Two animations on deliberately mismatched periods (4.3s and 2.9s).
+     They only realign every ~12.5s, so the light never looks like it is
+     repeating a loop even though each one is perfectly periodic. */
+  animation: sc-nav-snake 4.3s ease-in-out infinite, sc-nav-flicker 2.9s ease-in-out infinite;
+  /* NEGATIVE delays, set per item by the layout. A negative delay starts an
+     animation already part-way through its cycle, so the head enters at an
+     arbitrary point on the rim instead of always at 12 o'clock, where a
+     conic gradient begins. Must come after the `animation` shorthand — the
+     shorthand resets animation-delay to 0. */
+  animation-delay: var(--sc-delay, 0s), var(--sc-delay-2, 0s);
+}
+
+/* Irregular on purpose: the head darts along an edge, hesitates near a
+   corner, then darts again. An even sweep read as a machine; this reads
+   as something alive crawling round the rim. Still exactly one lap per
+   cycle, so it never drifts out of step with itself. */
+@keyframes sc-nav-snake {
+  0% {
+    --sc-angle: 0deg;
+  }
+  12% {
+    --sc-angle: 96deg;
+  }
+  21% {
+    --sc-angle: 116deg;
+  }
+  39% {
+    --sc-angle: 234deg;
+  }
+  48% {
+    --sc-angle: 251deg;
+  }
+  64% {
+    --sc-angle: 299deg;
+  }
+  79% {
+    --sc-angle: 321deg;
+  }
+  100% {
+    --sc-angle: 360deg;
+  }
+}
+
+/* Brightness breathing, on its own period — this is what stops the lap
+   from looking identical each time round. */
+@keyframes sc-nav-flicker {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  30% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.58;
+  }
+  80% {
+    opacity: 0.96;
+  }
+}
+
+/* The small square that heads a pop-out panel, and any other chip that
+   wants to read as "this is the active thing". */
+.sc-nav-chip {
+  background-color: rgb(var(--nav-accent) / 0.12);
+  color: rgb(var(--nav-accent));
+}
+
+/* An even, constant-speed lap. Used only under reduced motion, where the
+   darting `sc-nav-snake` above would be the wrong shape entirely: it is
+   the sudden changes of pace, not the travel itself, that provoke. */
+@keyframes sc-nav-drift {
+  from {
+    --sc-angle: 0deg;
+  }
+  to {
+    --sc-angle: 360deg;
+  }
+}
+
+/* Reduced motion keeps the light TRAVELLING rather than freezing it — the
+   moving edge is what marks the current page, and a dead border loses
+   that. What goes away is everything jumpy about it:
+
+     · the darting/hesitating keyframes become one even linear lap,
+     · the 2.9s opacity flicker is dropped for a constant brightness,
+     · the hard comet head becomes a soft band that fades in and out with
+       no sharp edge,
+     · and the lap slows from 4.3s to 11s.
+
+   One animation replaces the two, so the shorthand also clears the second
+   `animation-delay`; the per-item stagger is re-declared as a single
+   value below it. */
+@media (prefers-reduced-motion: reduce) {
+  .sc-nav-item[data-active='true'] {
+    border-color: rgb(var(--nav-accent) / 0.32);
+  }
+  .sc-nav-item[data-active='true']::before {
+    animation: sc-nav-drift 11s linear infinite;
+    animation-delay: var(--sc-delay, 0s);
+    opacity: 0.9;
+    background: conic-gradient(
+      from var(--sc-angle),
+      transparent 0deg 140deg,
+      rgb(var(--nav-accent) / 0.1) 215deg,
+      rgb(var(--nav-accent) / 0.34) 275deg,
+      rgb(var(--nav-accent) / 0.55) 325deg,
+      rgb(var(--nav-accent) / 0.34) 350deg,
+      rgb(var(--nav-accent) / 0.1) 356deg,
+      transparent 360deg
+    );
+  }
+}

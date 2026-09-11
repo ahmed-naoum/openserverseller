@@ -45,6 +45,8 @@ export const PRODUCTS_RUNTIME = `
     if (!cfgEl || !body) return;
     var cfg;
     try { cfg = JSON.parse(cfgEl.textContent || '{}'); } catch (e) { return; }
+    // Compile-time items (a store page): draw and stop. Nothing to fetch.
+    if (Array.isArray(cfg.items)) { draw(root, body, cfg, cfg.items); return; }
     if (!cfg.accountIds) return;
 
     fetch('/api/v1/public/products-by-accounts?accountIds=' + encodeURIComponent(cfg.accountIds), {
@@ -234,10 +236,13 @@ export const PRODUCTS_RUNTIME = `
   }
 
   function card(cfg, product) {
-    var wrap = el('div', 'bk-pr-c' + (cfg.shadow ? ' ' + cfg.shadow : ''),
+    var style = cfg.cardStyle || 'card';
+    var wrap = el('div', 'bk-pr-c' + (cfg.shadow ? ' ' + cfg.shadow : '') +
+      (style !== 'card' ? ' st-' + style : '') + (cfg.titleAlign === 'center' ? ' ta-c' : ''),
       'background:' + cfg.cardBg + ';border-radius:' + cfg.cardRadius + 'px');
 
-    var frame = el('div', 'bk-pr-im');
+    var frame = el('div', 'bk-pr-im' + (cfg.imageFit === 'cover' ? ' fit-cover' : ''),
+      cfg.imageHeight ? 'height:' + cfg.imageHeight + 'px' : '');
     var images = product.images || [];
     var src = safeSrc(images[0] && images[0].imageUrl);
     if (src) {
@@ -284,12 +289,17 @@ export const PRODUCTS_RUNTIME = `
     for (var i = 0; cfg.selected && i < cfg.selected.length; i++) {
       if (String(cfg.selected[i].id) === String(product.id)) { conf = cfg.selected[i]; break; }
     }
-    var link = (conf && conf.link) || '#express-checkout-block';
-    var btn = el('button', 'bk-pr-b',
-      'background:' + ((conf && conf.btnBg) || cfg.btnBg) +
-      ';color:' + ((conf && conf.btnColor) || cfg.btnColor));
+    // A store product carries its own page; a landing page's card scrolls to
+    // the checkout, as it always did.
+    var link = (conf && conf.link) || product.href || '#express-checkout-block';
+    var bs = cfg.buttonStyle || 'solid';
+    var bg = (conf && conf.btnBg) || cfg.btnBg;
+    var fg = (conf && conf.btnColor) || cfg.btnColor;
+    var btn = el('button', 'bk-pr-b' + (bs !== 'solid' ? ' bs-' + bs : ''),
+      (bs === 'solid' ? 'background:' + bg + ';color:' + fg : 'color:' + bg) +
+      (cfg.buttonRadius !== undefined ? ';border-radius:' + cfg.buttonRadius + 'px' : ''));
     btn.type = 'button';
-    btn.textContent = (conf && conf.buttonText) || 'Commander';
+    btn.textContent = (conf && conf.buttonText) || cfg.buttonText || 'Commander';
     btn.addEventListener('click', function(){ go(link, product); });
     foot.appendChild(btn);
 
@@ -310,6 +320,11 @@ export const PRODUCTS_RUNTIME = `
       try {
         window.dispatchEvent(new CustomEvent('select-product', { detail: { product: product } }));
       } catch (e) {}
+    } else if (link.charAt(0) === '/') {
+      // A page of this same store: navigate here, not in a new tab. Opening
+      // one tab per product is what a landing page did when every card was an
+      // external offer; on a storefront it loses the cart and the session.
+      window.location.href = link;
     } else {
       window.open(link, '_blank');
     }

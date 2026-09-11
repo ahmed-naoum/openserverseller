@@ -1,3 +1,4 @@
+import { flatBlocks } from '@shared/document/migrate.js';
 /**
  * How a lead is matched back to the express_checkout pack the customer picked.
  *
@@ -51,8 +52,8 @@ export interface PackSelection {
 export const readCheckoutOptions = (customStructure: any): PackOption[] | null => {
   if (!customStructure) return null;
   try {
-    const structure = typeof customStructure === 'string' ? JSON.parse(customStructure) : customStructure;
-    const blocks = Array.isArray(structure) ? structure : structure?.blocks || [];
+    // Any stored shape, the version 3 tree included — see shared/document.
+    const blocks = flatBlocks(customStructure);
     const checkout = blocks.find((b: any) => b?.type === 'express_checkout');
     const options = checkout?.content?.options;
     return Array.isArray(options) ? options : null;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { settingsApi } from '../../lib/api';
@@ -49,6 +49,40 @@ export default function LoginPage() {
     }, 4000);
     return () => clearInterval(timer);
   }, []);
+
+  /**
+   * Say why the user is looking at this page.
+   *
+   * A tab that was pushed here by a logout in another tab, or by a token the
+   * server stopped accepting, arrives with `?reason=`. Without the notice the
+   * page is indistinguishable from having clicked "Se connecter" on purpose,
+   * which is the confusing half of the problem this replaced.
+   */
+  const sessionNoticeShown = useRef(false);
+  useEffect(() => {
+    if (sessionNoticeShown.current) return;
+
+    const reason = new URLSearchParams(window.location.search).get('reason');
+    if (!reason) return;
+
+    const key = reason === 'logout'
+      ? 'session_ended_logout'   // another tab of this browser signed out
+      : reason === 'revoked'
+      ? 'session_ended_elsewhere' // another device, or the server ended it
+      : 'session_ended_expired';  // the token stopped being accepted
+    const message = tRaw(key, 'login');
+
+    // The login dictionary is fetched lazily and `t` hands back the key until it
+    // lands. Wait for the real string — this effect re-runs when it arrives —
+    // rather than flashing `session_ended_logout` at the user.
+    if (message === key) return;
+
+    sessionNoticeShown.current = true;
+    toast(message, { id: 'session-ended', icon: 'ℹ️', duration: 5000 });
+
+    // Drop the parameter so a refresh or a bookmark does not replay the notice.
+    window.history.replaceState({}, '', '/login');
+  }, [tRaw]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

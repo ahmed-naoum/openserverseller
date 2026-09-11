@@ -193,7 +193,11 @@ router.get(
           packageCode: l.order?.coliatyPackageCode || null,
           customerName: l.order?.customerName || l.fullName,
           customerCity: l.order?.customerCity || null,
-          productName: l.order?.items?.[0]?.product?.nameFr || l.order?.items?.[0]?.product?.nameAr || null,
+          productName:
+            l.order?.items?.[0]?.product?.nameFr ||
+            l.order?.items?.[0]?.product?.nameAr ||
+            (l.order?.items?.[0] as any)?.productName ||
+            null,
           parcelValueMad: Number(l.order?.totalAmountMad) || 0,
           earnedMad: feePerParcelMad,
           deliveredAt: l.order?.updatedAt || null,
@@ -452,6 +456,7 @@ router.get(
           productName:
             it.lead?.order?.items?.[0]?.product?.nameFr ||
             it.lead?.order?.items?.[0]?.product?.nameAr ||
+            (it.lead?.order?.items?.[0] as any)?.productName ||
             null,
           deliveredAt: it.lead?.order?.updatedAt || null,
         })),

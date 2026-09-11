@@ -23,5 +23,8 @@
   "confirm_password_label": "Confirm Password",
   "passwords_dont_match": "Passwords do not match",
   "password_update_success": "Password updated and logged in successfully!",
-  "confirm_btn": "Confirm"
+  "confirm_btn": "Confirm",
+  "session_ended_logout": "You were signed out in another tab.",
+  "session_ended_expired": "Your session has expired. Please sign in again.",
+  "session_ended_elsewhere": "You were signed out on another device."
 }

@@ -28,6 +28,10 @@ Thumbs.db
 
 # Uploads
 uploads/
+# Theme photographs are source, not user uploads (see backend/scripts/theme-images.py).
+!backend/uploads/
+backend/uploads/*
+!backend/uploads/themes/
 
 # Logs
 *.log

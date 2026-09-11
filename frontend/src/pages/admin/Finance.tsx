@@ -353,7 +353,7 @@ export default function AdminFinance() {
   };
 
   return (
-    <div className="space-y-8 p-6">
+    <div className="space-y-8">
       {/* Header & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

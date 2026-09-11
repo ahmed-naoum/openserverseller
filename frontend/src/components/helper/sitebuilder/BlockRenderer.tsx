@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BACKEND_URL, publicApi } from '../../../lib/api';
+import { BACKEND_URL, publicApi, storePublicApi } from '../../../lib/api';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { buildSourceToken, SOURCE_PARAM } from '../../../utils/referral';
+import { buildSourceToken, SOURCE_PARAM, storePath } from '../../../utils/referral';
+import type { BlockType as RegistryBlockType } from '@shared/blocks/index.js';
 
 /**
  * Where the end-of-video redirect records the destination it already sent this
@@ -12,7 +13,12 @@ import { buildSourceToken, SOURCE_PARAM } from '../../../utils/referral';
  */
 const VIDEO_REDIRECT_KEY = 'sc_vid_redirected';
 
-export type BlockType = 'header' | 'hero' | 'image' | 'text' | 'button' | 'express_checkout' | 'spacer' | 'countdown' | 'whatsapp' | 'slider' | 'products' | 'audio' | 'video';
+/**
+ * The block type union is owned by the shared registry, which both this app and
+ * the backend import. Re-exported here because every builder file already
+ * imports it from this module.
+ */
+export type BlockType = RegistryBlockType;
 
 export interface EditorBlock {
   id: string;
@@ -59,6 +65,220 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
         const { id, type, content } = block;
 
         switch (type) {
+          /**
+           * The page's own header. Mirrors blocks/siteHeader.ts on the server —
+           * the compiled HTML is what a visitor gets, and this is what the
+           * builder canvas and the SPA fallback draw, so the two must agree.
+           */
+          case 'site_header': {
+            const shLinks: any[] = Array.isArray(content.links) ? content.links.slice(0, 8) : [];
+            const shFg = content.textColor || '#0f172a';
+            const shBorder = content.borderColor || '#e2e8f0';
+            const shCta = String(content.ctaText || '').trim();
+            return (
+              <header
+                key={id}
+                className={content.sticky === false ? 'w-full' : 'w-full sticky top-0 z-50'}
+                style={{
+                  backgroundColor: content.bgColor || '#ffffff',
+                  color: shFg,
+                  borderBottom: '1px solid ' + shBorder,
+                }}
+              >
+                {content.announcementActive !== false && String(content.announcementText || '').trim() ? (
+                  <div
+                    className="w-full text-center text-xs font-bold px-4 py-2"
+                    style={{
+                      background: content.announcementBg || '#0f172a',
+                      color: content.announcementColor || '#ffffff',
+                    }}
+                  >
+                    {content.announcementText}
+                  </div>
+                ) : null}
+
+                <div className="max-w-6xl mx-auto flex items-center gap-4 px-4 py-3 md:px-6">
+                  <span className="flex items-center gap-2.5 font-black text-lg tracking-tight">
+                    {content.logoUrl ? (
+                      <img
+                        src={resolveUrl(content.logoUrl)}
+                        alt=""
+                        style={{ height: (content.logoHeight ?? 36) + 'px', width: 'auto' }}
+                        className="object-contain"
+                      />
+                    ) : null}
+                    {content.brandText}
+                  </span>
+
+                  <nav className="hidden md:flex items-center gap-6 flex-1 justify-center">
+                    {shLinks.map((l: any, i: number) => (
+                      <a
+                        key={i}
+                        href={isEditor ? undefined : l?.url || '#'}
+                        className="text-sm font-semibold opacity-80 hover:opacity-100 no-underline"
+                        style={{ color: shFg }}
+                      >
+                        {l?.label}
+                      </a>
+                    ))}
+                  </nav>
+
+                  <div className="flex items-center gap-2.5 ml-auto">
+                    {content.showCart !== false ? (
+                      <span
+                        className="inline-flex items-center justify-center w-10 h-10 rounded-xl"
+                        style={{ color: shFg }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}
+                          strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                          <path d="M3 6h18" />
+                          <path d="M16 10a4 4 0 0 1-8 0" />
+                        </svg>
+                      </span>
+                    ) : null}
+
+                    {shCta ? (
+                      <span
+                        className="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-extrabold"
+                        style={{ background: content.ctaBg || '#ea580c', color: content.ctaColor || '#ffffff' }}
+                      >
+                        {shCta}
+                      </span>
+                    ) : null}
+
+                    {shLinks.length > 0 ? (
+                      <span className="md:hidden inline-flex items-center justify-center w-10 h-10" style={{ color: shFg }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+                          strokeLinecap="round" className="w-5 h-5">
+                          <path d="M3 6h18" /><path d="M3 12h18" /><path d="M3 18h18" />
+                        </svg>
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </header>
+            );
+          }
+
+          /** The page's own footer. Mirrors blocks/siteFooter.ts. */
+          case 'site_footer': {
+            const sfFg = content.textColor || '#ffffff';
+            const sfMuted = content.mutedColor || 'rgba(255,255,255,0.7)';
+            const sfLine = content.borderColor || 'rgba(255,255,255,0.14)';
+            const sfCols: any[] = Array.isArray(content.columns) ? content.columns.slice(0, 4) : [];
+            const sfBadges: any[] = Array.isArray(content.badges) ? content.badges.slice(0, 4) : [];
+            return (
+              <footer
+                key={id}
+                className="w-full"
+                style={{
+                  background: content.bgColor || '#0f172a',
+                  color: sfFg,
+                  paddingTop: (content.paddingTop ?? 48) + 'px',
+                  paddingBottom: (content.paddingBottom ?? 32) + 'px',
+                }}
+              >
+                <div className="max-w-6xl mx-auto px-4 md:px-6">
+                  <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="flex flex-col gap-3">
+                      {content.logoUrl ? (
+                        <img
+                          src={resolveUrl(content.logoUrl)}
+                          alt=""
+                          style={{ height: (content.logoHeight ?? 40) + 'px', width: 'auto' }}
+                          className="object-contain"
+                        />
+                      ) : null}
+                      {content.brandText ? (
+                        <p className="text-xl font-black tracking-tight m-0" style={{ color: sfFg }}>
+                          {content.brandText}
+                        </p>
+                      ) : null}
+                      {content.about ? (
+                        <p className="text-[13px] leading-relaxed m-0" style={{ color: sfMuted }}>
+                          {content.about}
+                        </p>
+                      ) : null}
+                      {sfBadges.length > 0 ? (
+                        <div className="flex flex-wrap gap-2.5 mt-1">
+                          {sfBadges.map((b: any, i: number) => (
+                            <span
+                              key={i}
+                              className="inline-flex items-center px-3 py-1.5 rounded-full text-[11px] font-extrabold border"
+                              style={{ color: sfMuted, borderColor: sfLine }}
+                            >
+                              {String(b)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {sfCols.map((col: any, i: number) => (
+                      <div key={i}>
+                        <h4 className="text-[11px] font-black uppercase tracking-widest mb-3.5" style={{ color: sfFg }}>
+                          {col?.title}
+                        </h4>
+                        <ul className="list-none m-0 p-0 flex flex-col gap-2.5">
+                          {(Array.isArray(col?.links) ? col.links.slice(0, 8) : []).map((l: any, j: number) => (
+                            <li key={j}>
+                              <a
+                                href={isEditor ? undefined : l?.url || '#'}
+                                className="text-[13px] font-semibold no-underline opacity-75 hover:opacity-100"
+                                style={{ color: sfMuted }}
+                              >
+                                {l?.label}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+
+                  {content.copyright || content.note ? (
+                    <div
+                      className="mt-9 pt-5 border-t flex flex-wrap gap-2.5 items-center justify-between text-xs font-semibold"
+                      style={{ borderColor: sfLine, color: sfMuted }}
+                    >
+                      {content.copyright ? <p className="m-0">{content.copyright}</p> : null}
+                      {content.note ? <p className="m-0">{content.note}</p> : null}
+                    </div>
+                  ) : null}
+                </div>
+              </footer>
+            );
+          }
+
+          /** Bound to the page's product on the storefront; a sample in the editor. */
+          case 'product_detail': {
+            const prod = content.product && content.product.id
+              ? content.product
+              : { nameFr: 'Nom du produit', retailPriceMad: 199, description: 'La description du produit apparaîtra ici, remplie automatiquement pour chaque produit de votre boutique.', images: [] };
+            const img = prod.images?.[0]?.url || prod.images?.[0]?.imageUrl || '';
+            return (
+              <div key={id} className="max-w-6xl mx-auto px-4" style={{ paddingTop: (content.paddingTop ?? 24) + 'px', paddingBottom: (content.paddingBottom ?? 24) + 'px' }}>
+                <div className="grid gap-8 md:grid-cols-2 items-start">
+                  {content.showGallery !== false && (
+                    <div className="bg-gray-50 rounded-2xl aspect-square flex items-center justify-center overflow-hidden">
+                      {img ? <img src={resolveUrl(img)} alt="" className="w-full h-full object-contain" /> : <span className="text-xs font-bold text-gray-400">Image du produit</span>}
+                    </div>
+                  )}
+                  <div>
+                    <h1 className="text-2xl font-black tracking-tight mb-2">{prod.nameFr || prod.nameAr}</h1>
+                    <p className="text-3xl font-black mb-4" style={{ color: content.priceColor && !String(content.priceColor).startsWith('$') ? content.priceColor : '#f97316' }}>{prod.retailPriceMad} <span className="text-sm text-gray-500 font-bold">MAD</span></p>
+                    {content.showDescription !== false && prod.description && <p className="text-sm text-gray-600 leading-relaxed mb-5 whitespace-pre-line">{prod.description}</p>}
+                    <div className="flex gap-2 flex-wrap">
+                      <span className="inline-flex items-center px-5 h-11 rounded-xl text-sm font-black text-white" style={{ background: content.buttonBg && !String(content.buttonBg).startsWith('$') ? content.buttonBg : '#f97316' }}>{content.buttonText || 'Ajouter au panier'}</span>
+                      {content.showBuyNow !== false && <span className="inline-flex items-center px-5 h-11 rounded-xl text-sm font-black text-white bg-slate-900">{content.buyNowText || 'Commander maintenant'}</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
           case 'header':
             return (
               <header 
@@ -80,27 +300,126 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
               </header>
             );
 
-          case 'hero':
+          case 'hero': {
+            const heroAlign = content.align === 'left' ? 'text-left' : content.align === 'right' ? 'text-right' : 'text-center';
+            const heroSize =
+              content.titleSize === 'md' ? 'text-3xl md:text-4xl' :
+              content.titleSize === 'xl' ? 'text-4xl md:text-6xl leading-[1.08]' :
+              content.titleSize === '2xl' ? 'text-5xl md:text-7xl leading-[1.02] tracking-tight' :
+              'text-4xl md:text-5xl';
+            const kickerText = String(content.kicker ?? '').trim();
+            const kickerClass = content.kickerStyle === 'pill' ? 'px-3.5 py-1.5 rounded-full border border-current' : '';
+            const pAlign = content.align === 'left' ? 'mr-auto' : content.align === 'right' ? 'ml-auto' : 'mx-auto';
+            const heroBg = content.bgImage ? resolveUrl(content.bgImage) : '';
+            const heroTitle = String(content.title || 'Headline goes here');
+            const hl = String(content.highlight ?? '').trim();
+            const hlAt = hl ? heroTitle.toLowerCase().indexOf(hl.toLowerCase()) : -1;
+            const titleNode = hlAt === -1 ? heroTitle : (
+              <>
+                {heroTitle.slice(0, hlAt)}
+                <span style={{ color: content.highlightColor || '#ea580c' }}>{heroTitle.slice(hlAt, hlAt + hl.length)}</span>
+                {heroTitle.slice(hlAt + hl.length)}
+              </>
+            );
+            const ctaText = String(content.ctaText ?? '').trim();
+            const secondaryText = String(content.secondaryText ?? '').trim();
+            const ctaRadius = content.ctaRadius ?? 12;
+            const secondaryStyle = content.secondaryStyle || 'outline';
+            const secondaryColor = content.secondaryColor || content.titleColor || '#111827';
+            const justify = content.align === 'left' ? 'justify-start' : content.align === 'right' ? 'justify-end' : 'justify-center';
             return (
-              <div 
-                key={id} 
-                className="w-full px-6 text-center" 
-                style={{ 
-                  backgroundColor: content.bgColor || '#f9fafb',
+              <div
+                key={id}
+                className={`w-full px-6 relative overflow-hidden ${heroAlign} ${content.minHeight ? 'flex items-center' : ''} ${content.titleFont === 'serif' ? '[&_h2]:font-serif' : ''}`}
+                style={{
+                  background: content.bgColor || '#f9fafb',
                   paddingTop: `${content.paddingTop ?? 48}px`,
                   paddingBottom: `${content.paddingBottom ?? 48}px`,
                   marginTop: `${content.marginTop ?? 0}px`,
                   marginBottom: `${content.marginBottom ?? 24}px`,
+                  borderRadius: content.radius ? `${content.radius}px` : undefined,
+                  minHeight: content.minHeight ? `${content.minHeight}px` : undefined,
                 }}
               >
-                <h2 className="text-4xl md:text-5xl font-black mb-4 leading-tight" style={{ color: content.titleColor || '#111827' }}>
-                  {content.title || 'Headline goes here'}
-                </h2>
-                <p className="text-lg md:text-xl max-w-2xl mx-auto" style={{ color: content.subtitleColor || '#4b5563' }}>
-                  {content.subtitle || 'Subheadline goes here to explain the offer.'}
-                </p>
+                {heroBg ? (
+                  <>
+                    <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${heroBg}")` }} />
+                    <div className="absolute inset-0" style={{ background: content.overlayColor || 'rgba(10,12,20,0.45)' }} />
+                  </>
+                ) : null}
+                <div className="relative w-full" style={{ maxWidth: content.maxWidth ? `${content.maxWidth}px` : undefined, margin: content.align === 'left' ? '0' : content.align === 'right' ? '0 0 0 auto' : '0 auto' }}>
+                  {kickerText && (
+                    <span className={`inline-block text-xs font-extrabold uppercase tracking-[.16em] mb-3.5 ${kickerClass}`} style={{ color: content.kickerColor || content.titleColor || '#111827' }}>
+                      {kickerText}
+                    </span>
+                  )}
+                  <h2 className={`${heroSize} font-black mb-4 leading-tight ${content.uppercase ? 'uppercase' : ''}`} style={{ color: content.titleColor || '#111827' }}>
+                    {titleNode}
+                  </h2>
+                  <p className={`text-lg md:text-xl max-w-2xl ${pAlign}`} style={{ color: content.subtitleColor || '#4b5563' }}>
+                    {content.subtitle || 'Subheadline goes here to explain the offer.'}
+                  </p>
+                  {(ctaText || secondaryText) && (
+                    <div className={`flex flex-wrap gap-3 mt-6 ${justify}`}>
+                      {ctaText && (
+                        <a href={content.ctaUrl || '/products'} className="inline-flex items-center justify-center px-7 py-3.5 font-extrabold text-[15px] border-2 border-transparent" style={{ background: content.ctaBg || '#ea580c', color: content.ctaColor || '#ffffff', borderRadius: ctaRadius }}>
+                          {ctaText}
+                        </a>
+                      )}
+                      {secondaryText && (
+                        <a
+                          href={content.secondaryUrl || '/products'}
+                          className={`inline-flex items-center justify-center font-extrabold text-[15px] border-2 ${secondaryStyle === 'link' ? 'px-1.5 py-3.5 underline underline-offset-4 border-transparent' : secondaryStyle === 'filled' ? 'px-7 py-3.5 border-transparent' : 'px-7 py-3.5 border-current'}`}
+                          style={{ color: secondaryStyle === 'filled' ? (content.ctaColor || '#ffffff') : secondaryColor, background: secondaryStyle === 'filled' ? secondaryColor : 'transparent', borderRadius: ctaRadius }}
+                        >
+                          {secondaryText}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             );
+          }
+
+          case 'info_card': {
+            const glass = (content.style || 'glass') === 'glass';
+            const icText = content.textColor || '#0f172a';
+            const icMuted = content.mutedColor || '#475569';
+            const icRows = (Array.isArray(content.rows) ? content.rows : []).slice(0, 6).filter((r: any) => r && (r.label || r.value));
+            const pct = typeof content.progressPct === 'number' ? Math.max(0, Math.min(100, content.progressPct)) : -1;
+            const icJustify = content.align === 'left' ? 'justify-start' : content.align === 'center' ? 'justify-center' : 'justify-end';
+            return (
+              <div key={id} className={`w-full flex px-4 ${icJustify}`} style={{ paddingTop: `${content.paddingTop ?? 16}px`, paddingBottom: `${content.paddingBottom ?? 16}px`, marginTop: `${content.marginTop ?? 0}px`, marginBottom: `${content.marginBottom ?? 0}px` }}>
+                <div
+                  className={`w-full p-5 border shadow-2xl shadow-black/20 ${glass ? 'backdrop-blur-xl' : ''}`}
+                  style={{ background: content.bgColor || (glass ? 'rgba(255,255,255,0.86)' : '#ffffff'), color: icText, borderColor: content.borderColor || (glass ? 'rgba(255,255,255,0.6)' : '#e2e8f0'), borderRadius: content.radius ?? 20, maxWidth: content.maxWidth ?? 380 }}
+                >
+                  {content.badge ? <span className="inline-block text-[11px] font-extrabold tracking-[.12em] uppercase mb-2.5" style={{ color: content.badgeColor || '#16a34a' }}>{content.badge}</span> : null}
+                  {content.title ? <h3 className="text-lg font-extrabold leading-snug mb-1">{content.title}</h3> : null}
+                  {content.subtitle ? <p className="text-[13px] leading-relaxed mb-3.5" style={{ color: icMuted }}>{content.subtitle}</p> : null}
+                  {icRows.map((r: any, i: number) => (
+                    <div key={i} className="flex justify-between gap-4 py-2 text-[13px] border-t border-gray-500/20">
+                      <span style={{ color: icMuted }}>{r.label}</span>
+                      <b className="font-extrabold text-right">{r.value}</b>
+                    </div>
+                  ))}
+                  {pct >= 0 && content.progressLabel ? (
+                    <div className="mt-3">
+                      <div className="flex justify-between text-xs font-bold mb-1.5"><span style={{ color: icMuted }}>{content.progressLabel}</span><span>{content.progressValue ?? `${pct} %`}</span></div>
+                      <div className="h-1.5 rounded-full bg-gray-500/20 overflow-hidden"><i className="block h-full rounded-full" style={{ width: `${pct}%`, background: content.progressColor || '#22c55e' }} /></div>
+                    </div>
+                  ) : null}
+                  {content.figure ? (
+                    <div className="mt-3.5 flex items-baseline gap-2"><b className="text-[26px] font-black leading-none" style={{ color: content.figureColor || icText }}>{content.figure}</b>{content.figureCaption ? <span className="text-xs" style={{ color: icMuted }}>{content.figureCaption}</span> : null}</div>
+                  ) : null}
+                  {content.ctaText ? (
+                    <a href={content.ctaUrl || '/products'} className="flex items-center justify-center mt-4 px-4 py-3 rounded-xl font-extrabold text-sm" style={{ background: content.ctaBg || '#0f172a', color: content.ctaColor || '#ffffff' }}>{content.ctaText}</a>
+                  ) : null}
+                </div>
+              </div>
+            );
+          }
 
           case 'text':
             return (
@@ -120,9 +439,17 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
                 }}
               >
                 {content.isHeading ? (
-                  <h3 className="text-2xl font-bold mb-2" style={{ color: content.color || '#111827' }}>{content.text || 'Section Heading'}</h3>
+                  <h3
+                    className={`${content.size === 'sm' ? 'text-xl' : content.size === 'lg' ? 'text-3xl' : content.size === 'xl' ? 'text-4xl md:text-5xl leading-tight' : 'text-2xl'} ${content.weight === 'black' ? 'font-black' : content.weight === 'normal' ? 'font-normal' : content.weight === 'medium' ? 'font-medium' : 'font-bold'} ${content.uppercase ? 'uppercase' : ''} ${content.tracking === 'wide' ? 'tracking-[.14em]' : content.tracking === 'tight' ? 'tracking-tight' : ''} mb-2`}
+                    style={{ color: content.color || '#111827' }}
+                  >
+                    {content.text || 'Section Heading'}
+                  </h3>
                 ) : (
-                  <p className="text-base leading-relaxed" style={{ color: content.color || '#374151', textAlign: content.align || 'left' }}>
+                  <p
+                    className={`${content.size === 'sm' ? 'text-sm' : content.size === 'lg' ? 'text-lg' : content.size === 'xl' ? 'text-xl' : 'text-base'} ${content.weight === 'black' ? 'font-black' : content.weight === 'bold' ? 'font-bold' : content.weight === 'medium' ? 'font-medium' : ''} ${content.uppercase ? 'uppercase' : ''} ${content.tracking === 'wide' ? 'tracking-[.14em]' : ''} leading-relaxed`}
+                    style={{ color: content.color || '#374151', textAlign: content.align || 'left' }}
+                  >
                     {content.text || 'Add some descriptive text here to explain the product details and benefits.'}
                   </p>
                 )}
@@ -220,6 +547,99 @@ export default function BlockRenderer({ blocks, renderCheckout, isEditor = false
               );
             }
             return null;
+
+          case 'feature_list': {
+            const flItems = (Array.isArray(content.items) ? content.items : []).slice(0, 12).filter((it: any) => it && (it.title || it.text));
+            const flCols = Math.max(1, Math.min(3, Number(content.columns) || 2));
+            const flMarker = content.marker || 'check';
+            const flColor = content.markerColor || '#16a34a';
+            const flSize = content.titleSize === 'xl' ? 'text-4xl md:text-5xl' : content.titleSize === 'md' ? 'text-2xl' : 'text-3xl';
+            return (
+              <div key={id} className={`w-full px-6 ${content.align === 'center' ? 'text-center' : ''}`} style={{ paddingTop: `${content.paddingTop ?? 16}px`, paddingBottom: `${content.paddingBottom ?? 16}px`, marginTop: `${content.marginTop ?? 0}px`, marginBottom: `${content.marginBottom ?? 0}px` }}>
+                <div style={{ maxWidth: content.maxWidth ? `${content.maxWidth}px` : undefined, margin: content.align === 'center' ? '0 auto' : undefined }}>
+                  {content.kicker ? <span className="inline-block text-xs font-extrabold tracking-[.14em] uppercase mb-2.5" style={{ color: flColor }}>{content.kicker}</span> : null}
+                  {content.title ? <h3 className={`${flSize} font-black leading-tight mb-2.5 ${content.uppercase ? 'uppercase' : ''}`} style={{ color: content.titleColor || '#0f172a' }}>{content.title}</h3> : null}
+                  {content.text ? <p className="text-base leading-relaxed mb-4" style={{ color: content.textColor || '#475569' }}>{content.text}</p> : null}
+                  {flItems.length ? (
+                    <ul className={`list-none m-0 p-0 grid gap-x-6 gap-y-3 ${flCols === 3 ? 'sm:grid-cols-3' : flCols === 2 ? 'sm:grid-cols-2' : ''}`}>
+                      {flItems.map((it: any, i: number) => (
+                        <li key={i} className="flex items-start gap-3 text-left">
+                          <i className="shrink-0 w-[26px] h-[26px] rounded-full inline-flex items-center justify-center text-[13px] font-black not-italic mt-0.5" style={flMarker === 'dot' || flMarker === 'icon' ? { color: flColor } : { background: flColor, color: '#fff' }}>
+                            {flMarker === 'number' ? i + 1 : flMarker === 'dot' ? '•' : flMarker === 'icon' && it.icon ? it.icon : '✓'}
+                          </i>
+                          <div>
+                            {it.title ? <b className="block text-[15px] font-extrabold leading-snug" style={{ color: content.titleColor || '#0f172a' }}>{it.title}</b> : null}
+                            {it.text ? <span className="block text-[13px] leading-relaxed mt-0.5" style={{ color: content.textColor || '#475569' }}>{it.text}</span> : null}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {content.ctaText ? <a href={content.ctaUrl || '/products'} className="inline-flex items-center justify-center mt-5 px-6 py-3 rounded-xl font-extrabold text-sm" style={{ background: content.ctaBg || '#0f172a', color: content.ctaColor || '#ffffff' }}>{content.ctaText}</a> : null}
+                </div>
+              </div>
+            );
+          }
+
+          case 'quote': {
+            const qStars = Math.max(0, Math.min(5, Number(content.stars ?? 5)));
+            const qSize = content.size === 'xl' ? 'text-3xl md:text-4xl' : content.size === 'md' ? 'text-xl md:text-2xl' : 'text-2xl md:text-3xl';
+            return (
+              <div key={id} className={`w-full px-6 ${content.align === 'left' ? 'text-left' : 'text-center'}`} style={{ paddingTop: `${content.paddingTop ?? 24}px`, paddingBottom: `${content.paddingBottom ?? 24}px`, marginTop: `${content.marginTop ?? 0}px`, marginBottom: `${content.marginBottom ?? 0}px` }}>
+                <div style={{ maxWidth: `${content.maxWidth ?? 820}px`, margin: content.align === 'left' ? undefined : '0 auto' }}>
+                  {content.kicker ? <span className="inline-block text-xs font-extrabold tracking-[.14em] uppercase mb-3 opacity-80" style={{ color: content.mutedColor || '#64748b' }}>{content.kicker}</span> : null}
+                  {qStars > 0 ? <div className="text-base tracking-[2px] mb-3" style={{ color: content.starColor || '#f59e0b' }}>{'★'.repeat(qStars)}</div> : null}
+                  <blockquote className={`m-0 font-bold leading-snug ${qSize} ${content.serif ? 'font-serif italic font-medium' : ''}`} style={{ color: content.textColor || '#0f172a' }}>« {content.text || 'Absolument délicieux !'} »</blockquote>
+                  {(content.author || content.role) ? (
+                    <div className={`flex items-center gap-3 mt-4 text-sm ${content.align === 'left' ? '' : 'justify-center'}`}>
+                      {content.avatarUrl ? <img src={resolveUrl(content.avatarUrl)} alt="" className="w-11 h-11 rounded-full object-cover" /> : null}
+                      <div>{content.author ? <b className="block font-extrabold" style={{ color: content.textColor || '#0f172a' }}>{content.author}</b> : null}{content.role ? <span className="block text-[13px]" style={{ color: content.mutedColor || '#64748b' }}>{content.role}</span> : null}</div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          }
+
+          case 'chips': {
+            const chItems = (Array.isArray(content.items) ? content.items : []).slice(0, 16).filter((it: any) => it && it.label);
+            const chStyle = content.style || 'pill';
+            const chJustify = content.align === 'left' ? 'justify-start' : content.align === 'right' ? 'justify-end' : 'justify-center';
+            const chipCss: React.CSSProperties = { color: content.textColor || '#0f172a', background: chStyle === 'pill' ? (content.bgColor || '#f1f5f9') : 'transparent', borderColor: chStyle === 'outline' ? (content.borderColor || content.textColor || '#e2e8f0') : 'transparent' };
+            return (
+              <div key={id} className={`w-full px-6 flex flex-wrap items-center gap-2 ${chJustify}`} style={{ paddingTop: `${content.paddingTop ?? 8}px`, paddingBottom: `${content.paddingBottom ?? 8}px`, marginTop: `${content.marginTop ?? 0}px`, marginBottom: `${content.marginBottom ?? 0}px` }}>
+                {content.prefix ? <span className="text-xs font-bold opacity-60 mr-1" style={{ color: content.textColor || '#0f172a' }}>{content.prefix}</span> : null}
+                {chItems.map((it: any, i: number) => {
+                  const cls = `inline-flex items-center rounded-full border font-bold leading-tight ${content.size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-[13px]'} ${content.uppercase ? 'uppercase tracking-[.08em] !text-[11px]' : ''} ${chStyle === 'text' ? '!px-0 !py-0.5 !border-0 !bg-transparent' : ''}`;
+                  return it.url ? <a key={i} href={it.url} className={cls} style={chipCss}>{it.label}</a> : <span key={i} className={cls} style={chipCss}>{it.label}</span>;
+                })}
+              </div>
+            );
+          }
+
+          case 'gallery': {
+            const gaTiles = (Array.isArray(content.images) ? content.images : []).slice(0, 24).filter((im: any) => im && im.url);
+            const gaCols = Math.max(1, Math.min(6, Number(content.columns) || 4));
+            if (!gaTiles.length) {
+              return isEditor ? <div key={id} className="w-full h-40 mx-4 bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 text-xs">Galerie — ajoutez des photos dans les propriétés</div> : null;
+            }
+            return (
+              <div key={id} className="w-full px-4" style={{ paddingTop: `${content.paddingTop ?? 8}px`, paddingBottom: `${content.paddingBottom ?? 8}px`, marginTop: `${content.marginTop ?? 0}px`, marginBottom: `${content.marginBottom ?? 0}px` }}>
+                <div className="grid w-full" style={{ gridTemplateColumns: `repeat(${gaCols},1fr)`, gap: content.gap ?? 12, gridAutoRows: `${content.rowHeight ?? 220}px`, gridAutoFlow: 'dense' }}>
+                  {gaTiles.map((im: any, i: number) => {
+                    const tileStyle: React.CSSProperties = { borderRadius: content.radius ?? 16, gridColumn: Number(im.span) === 2 ? 'span 2' : undefined, gridRow: Number(im.rows) === 2 ? 'span 2' : undefined };
+                    const inner = (
+                      <>
+                        <img src={resolveUrl(im.url)} alt={im.alt || ''} className="w-full h-full object-cover" loading={i < 2 ? 'eager' : 'lazy'} />
+                        {im.caption ? <span className="absolute left-0 right-0 bottom-0 px-3.5 py-2.5 text-[13px] font-bold" style={{ color: content.captionColor || '#fff', background: content.captionBg || 'rgba(0,0,0,0.45)' }}>{im.caption}</span> : null}
+                      </>
+                    );
+                    return im.href ? <a key={i} href={im.href} className="relative overflow-hidden block bg-gray-100" style={tileStyle}>{inner}</a> : <div key={i} className="relative overflow-hidden bg-gray-100" style={tileStyle}>{inner}</div>;
+                  })}
+                </div>
+              </div>
+            );
+          }
 
           case 'countdown':
             return (
@@ -322,13 +742,58 @@ function ProductsBlock({ content, resolveUrl }: ProductsBlockProps) {
   const priceColor = content.priceColor || '#f97316';
   const btnBg = content.btnBg || '#f97316';
   const btnColor = content.btnColor || '#ffffff';
-  
+  const cardStyle: 'card' | 'flat' | 'minimal' = content.cardStyle === 'flat' || content.cardStyle === 'minimal' ? content.cardStyle : 'card';
+  const imageHeight = content.imageHeight || 192;
+  const imageFit = content.imageFit === 'cover' ? 'object-cover' : 'object-contain p-2';
+  const buttonStyle: 'solid' | 'outline' | 'text' = content.buttonStyle === 'outline' || content.buttonStyle === 'text' ? content.buttonStyle : 'solid';
+  const buttonRadius = content.buttonRadius ?? 12;
+  const titleAlign = content.titleAlign === 'center' ? 'text-center' : 'text-left';
+
   const paddingTop = content.paddingTop ?? 32;
   const paddingBottom = content.paddingBottom ?? 32;
   const marginTop = content.marginTop ?? 0;
   const marginBottom = content.marginBottom ?? 0;
 
+  // Three sources, in order. `items`: products the server already bound
+  // (the compiled page's contract, `items ⇐ $catalogue`). `storeId`: the block
+  // sits on a store page rendered by the SPA or the Studio canvas, where no
+  // binding has run — the store's own catalogue is what it shows. Then the
+  // legacy accounts endpoint of the old landing-page builder.
+  const boundItems: any[] | null = Array.isArray(content.items) ? content.items : null;
+  const itemsKey = boundItems ? boundItems.map((p: any) => p?.id ?? '').join(',') : '';
+  const storeId: number | null = Number.isInteger(content.storeId) ? Number(content.storeId) : null;
+  const collectionSlug: string | undefined = typeof content.collection === 'string' && content.collection ? content.collection : undefined;
+
   useEffect(() => {
+    if (boundItems) {
+      setProducts(boundItems);
+      return;
+    }
+    if (storeId) {
+      let cancelled = false;
+      setLoading(true);
+      storePublicApi
+        .getProducts({ storeId, limit: 24, collection: collectionSlug })
+        .then((res) => {
+          if (cancelled) return;
+          const data = res.data?.data?.products ?? res.data?.products ?? [];
+          // The catalogue names an image's file `url`; the card, written for the
+          // accounts endpoint, reads `imageUrl`. Carry both, as the compiler does.
+          setProducts(
+            (Array.isArray(data) ? data : []).map((p: any) => ({
+              ...p,
+              images: Array.isArray(p?.images) ? p.images.map((i: any) => ({ ...i, imageUrl: i?.imageUrl ?? i?.url ?? null, url: i?.url ?? i?.imageUrl ?? null })) : [],
+            })),
+          );
+        })
+        .catch((err) => console.error('Failed to load store products for ProductsBlock:', err))
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
     if (accountIds.length === 0) {
       setProducts([]);
       return;
@@ -348,7 +813,8 @@ function ProductsBlock({ content, resolveUrl }: ProductsBlockProps) {
     };
 
     fetchProducts();
-  }, [JSON.stringify(accountIds)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(accountIds), storeId, collectionSlug, itemsKey]);
 
   // Filter and sort products based on selectedProducts content config
   const displayedProducts = selectedProducts.length > 0
@@ -430,6 +896,10 @@ function ProductsBlock({ content, resolveUrl }: ProductsBlockProps) {
       // Premium feature: Dispatch select-product custom event to auto-select option in checkout
       const event = new CustomEvent('select-product', { detail: { product } });
       window.dispatchEvent(event);
+    } else if (linkUrl.startsWith('/')) {
+      // A page of this same store: navigate here, not in a new tab, keeping
+      // the dev `?__store=` that names the store on a host without subdomains.
+      window.location.href = storePath(linkUrl);
     } else {
       window.open(linkUrl, '_blank');
     }
@@ -441,25 +911,27 @@ function ProductsBlock({ content, resolveUrl }: ProductsBlockProps) {
     
     // Find card button config
     const spConfig = selectedProducts.find((sp: any) => sp.productId === product.id);
-    const btnLink = spConfig?.link || '#express-checkout-block';
-    const btnText = spConfig?.buttonText || 'Commander';
+    // A store product links to its own page; a landing-page product to the checkout block below it.
+    const btnLink = spConfig?.link || product.href || (product.ref ? `/p/${encodeURIComponent(product.ref)}` : storeId || boundItems ? `/p/${product.id}` : '#express-checkout-block');
+    const btnText = spConfig?.buttonText || content.buttonText || 'Commander';
     const cardBtnBg = spConfig?.btnBg || btnBg;
     const cardBtnColor = spConfig?.btnColor || btnColor;
+    const boxed = cardStyle === 'card';
 
     return (
-      <div 
-        className={`flex flex-col border border-gray-100 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg h-full ${shadowClass}`}
-        style={{ 
-          backgroundColor: cardBg,
+      <div
+        className={`flex flex-col overflow-hidden transition-all duration-300 h-full ${boxed ? `border border-gray-100 hover:-translate-y-1 hover:shadow-lg ${shadowClass}` : ''}`}
+        style={{
+          backgroundColor: boxed ? cardBg : 'transparent',
           borderRadius: `${cardRadius}px`
         }}
       >
-        <div className="relative h-48 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+        <div className="relative bg-gray-50 flex items-center justify-center overflow-hidden shrink-0" style={{ height: imageHeight, borderRadius: boxed ? undefined : `${cardRadius}px` }}>
           {primaryImage ? (
-            <img 
-              src={resolveUrl(primaryImage)} 
-              alt={product.nameFr || product.nameEn} 
-              className="w-full h-full object-contain p-2 transition-transform duration-500 hover:scale-105"
+            <img
+              src={resolveUrl(primaryImage)}
+              alt={product.nameFr || product.nameEn}
+              className={`w-full h-full ${imageFit} transition-transform duration-500 hover:scale-105`}
               loading="lazy"
             />
           ) : (
@@ -476,26 +948,28 @@ function ProductsBlock({ content, resolveUrl }: ProductsBlockProps) {
           )}
         </div>
 
-        <div className="p-4 flex flex-col flex-1 justify-between">
+        <div className={`${boxed ? 'p-4' : 'pt-3.5 px-0.5 pb-1'} flex flex-col flex-1 justify-between ${titleAlign}`}>
           <div className="space-y-1">
-            <h4 
+            <h4
               className="text-base font-black line-clamp-1"
               style={{ color: titleColor }}
             >
               {product.nameFr || product.nameEn || product.nameAr}
             </h4>
-            <p 
-              className="text-xs line-clamp-2 leading-relaxed"
-              style={{ color: descColor }}
-            >
-              {product.description || "Aucune description disponible."}
-            </p>
+            {cardStyle !== 'minimal' && (
+              <p
+                className="text-xs line-clamp-2 leading-relaxed"
+                style={{ color: descColor }}
+              >
+                {product.description || "Aucune description disponible."}
+              </p>
+            )}
           </div>
-          
-          <div className="mt-4 pt-3 border-t border-gray-50">
+
+          <div className={boxed ? 'mt-4 pt-3 border-t border-gray-50' : 'mt-2'}>
             {content.showPrice !== false && (
-              <div className="flex items-center justify-between">
-                <span 
+              <div className={`flex items-center ${titleAlign === 'text-center' ? 'justify-center' : 'justify-between'}`}>
+                <span
                   className="text-lg font-black"
                   style={{ color: priceColor }}
                 >
@@ -503,13 +977,16 @@ function ProductsBlock({ content, resolveUrl }: ProductsBlockProps) {
                 </span>
               </div>
             )}
-            
+
             <button
               onClick={() => handleButtonClick(btnLink, product)}
-              className="w-full py-2.5 px-4 rounded-xl font-black text-xs text-center shadow transition-all mt-3 active:scale-98 cursor-pointer"
+              className={`font-black text-xs text-center transition-all mt-3 active:scale-98 cursor-pointer ${
+                buttonStyle === 'text' ? 'px-0 py-1 underline underline-offset-4 tracking-wide' : buttonStyle === 'outline' ? 'w-full py-2.5 px-4 border-2 border-current' : 'w-full py-2.5 px-4 shadow'
+              }`}
               style={{
-                backgroundColor: cardBtnBg,
-                color: cardBtnColor
+                backgroundColor: buttonStyle === 'solid' ? cardBtnBg : 'transparent',
+                color: buttonStyle === 'solid' ? cardBtnColor : cardBtnBg,
+                borderRadius: `${buttonRadius}px`,
               }}
             >
               {btnText}

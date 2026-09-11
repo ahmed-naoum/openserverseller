@@ -4,6 +4,7 @@ import { fulfillmentApi, uploadApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { X, Plus, Trash2, Link as LinkIcon, Image as ImageIcon, Upload, AlertCircle, Star, CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { swal } from '../../components/ui/SweetAlert';
 
 interface UploadedImage {
   url: string;
@@ -61,24 +62,34 @@ export default function AdminFulfillment() {
     }
   });
 
-  const handleAction = (req: any, actionType: string) => {
+  const handleAction = async (req: any, actionType: string) => {
     let quantity = undefined;
     if (actionType === 'GRANT_INVENTORY') {
-       const qty = prompt("Combien d'unités souhaitez-vous accorder ?", "10");
+       const qty = await swal.prompt({
+         type: 'info',
+         title: "Combien d'unités souhaitez-vous accorder ?",
+         input: {
+           type: 'number',
+           defaultValue: '10',
+           min: 1,
+           validate: (v) => (Number.isInteger(Number(v)) && Number(v) > 0 ? null : 'Quantité invalide'),
+         },
+         confirmText: 'Continuer',
+       });
        if (!qty) return;
        quantity = parseInt(qty, 10);
     }
     
-    if (confirm(`Êtes-vous sûr de vouloir exécuter l'action: ${actionType} ?`)) {
+    if (await swal.confirm({ title: 'Exécuter cette action ?', text: `Action : ${actionType}`, confirmText: 'Exécuter' })) {
       fulfillMutation.mutate({ id: req.id.toString(), actionType, quantity });
     }
   };
 
-  const handleReject = (req: any) => {
+  const handleReject = async (req: any) => {
     const label = req.status === 'RESOLVED' 
       ? 'Révoquer les droits accordés et fermer cette demande' 
       : 'Rejeter cette demande';
-    if (confirm(`${label} ?`)) {
+    if (await swal.danger({ title: `${label} ?`, confirmText: 'Confirmer' })) {
       rejectMutation.mutate(req.id.toString());
     }
   };

@@ -1,216 +1,462 @@
-import React from 'react';
-import { Crown, Star, Shield, Medal, Flame, Plus, ShoppingBag, Package } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { Crown, Star, Shield, Medal, Lock, Check, ShoppingBag, Package, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react';
+import { motion, animate, useReducedMotion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../../contexts/LanguageContext';
 
-export const TierProgressBanner = ({ 
-  totalEarned, 
+/**
+ * One palette per tier. Every tier keeps its identity whether or not it is
+ * unlocked: a locked tier is drawn as an outline in its own colour, never
+ * flattened to grey, so the seller can see what they are climbing towards.
+ *
+ * `ink` is the icon colour on the filled medal — the light metals (silver,
+ * gold) need dark ink, the saturated ones take white.
+ */
+const TIERS = [
+  {
+    id: 0, name: 'tier_beginner', min: 0, icon: Shield,
+    medal: 'from-amber-400 via-orange-500 to-orange-700', ink: 'text-white',
+    text: 'text-orange-600', soft: 'bg-orange-50', ring: 'ring-orange-200',
+    bar: 'from-amber-400 to-orange-600', glow: 'rgba(249,115,22,0.45)', spark: '#fb923c',
+  },
+  {
+    id: 1, name: 'tier_silver', min: 100000, icon: Medal,
+    medal: 'from-white via-slate-200 to-slate-400', ink: 'text-slate-700',
+    text: 'text-slate-500', soft: 'bg-slate-100', ring: 'ring-slate-200',
+    bar: 'from-slate-300 to-slate-400', glow: 'rgba(148,163,184,0.45)', spark: '#cbd5e1',
+  },
+  {
+    id: 2, name: 'tier_gold', min: 1000000, icon: Star,
+    medal: 'from-yellow-200 via-amber-400 to-amber-600', ink: 'text-amber-900',
+    text: 'text-amber-600', soft: 'bg-amber-50', ring: 'ring-amber-200',
+    bar: 'from-yellow-300 to-amber-500', glow: 'rgba(245,158,11,0.45)', spark: '#fbbf24',
+  },
+  {
+    id: 3, name: 'tier_platine', min: 10000000, icon: Crown,
+    medal: 'from-sky-300 via-violet-400 to-fuchsia-500', ink: 'text-white',
+    text: 'text-violet-600', soft: 'bg-violet-50', ring: 'ring-violet-200',
+    bar: 'from-violet-400 to-fuchsia-500', glow: 'rgba(167,139,250,0.45)', spark: '#c084fc',
+  },
+];
+
+/**
+ * Hover and tap need their own transition. An element's `transition` prop
+ * applies to every animation on it, entrance included — so a card that enters
+ * with `delay: 0.7` would also wait 0.7s before reacting to the pointer. These
+ * are deliberately short: a hover that takes longer than ~0.2s reads as lag.
+ */
+const HOVER = { duration: 0.16, ease: [0.22, 1, 0.36, 1] as const };
+const TAP = { duration: 0.08, ease: 'easeOut' as const };
+
+const compact = (n: number) =>
+  n >= 1000000 ? `${(n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1)}M`
+  : n >= 1000 ? `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`
+  : `${n}`;
+
+/**
+ * Counts from 0 to `value` over `duration` seconds. Numbers that land in one
+ * frame read as static; a short count-up is what makes them feel earned.
+ * Respects reduced motion by snapping straight to the value.
+ */
+function useCountUp(value: number, duration = 1.4, reduced = false) {
+  const [n, setN] = useState(reduced ? value : 0);
+  useEffect(() => {
+    if (reduced) { setN(value); return; }
+    const controls = animate(0, value, {
+      duration,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: (v) => setN(Math.round(v)),
+    });
+    return () => controls.stop();
+  }, [value, duration, reduced]);
+  return n;
+}
+
+/** Three small sparks orbiting a medal, each on its own radius and period. */
+const Sparks = ({ colour }: { colour: string }) => (
+  <>
+    {[
+      { r: 58, d: 6, s: 6, delay: 0 },
+      { r: 66, d: 9, s: 4, delay: 1.2 },
+      { r: 52, d: 7.5, s: 5, delay: 2.4 },
+    ].map((p, i) => (
+      <motion.span
+        key={i}
+        className="absolute left-1/2 top-1/2 pointer-events-none"
+        style={{ width: p.r * 2, height: p.r * 2, marginLeft: -p.r, marginTop: -p.r }}
+        animate={{ rotate: 360 }}
+        transition={{ duration: p.d, repeat: Infinity, ease: 'linear', delay: -p.delay }}
+      >
+        <motion.span
+          className="absolute top-0 left-1/2 rounded-full"
+          style={{ width: p.s, height: p.s, marginLeft: -p.s / 2, background: colour, boxShadow: `0 0 10px ${colour}` }}
+          animate={{ opacity: [0.2, 1, 0.2], scale: [0.7, 1.2, 0.7] }}
+          transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut', delay: p.delay * 0.4 }}
+        />
+      </motion.span>
+    ))}
+  </>
+);
+
+export const TierProgressBanner = ({
+  totalEarned,
   title,
   productsUrl = '/influencer/inventory',
   marketplaceUrl = '/influencer/marketplace'
-}: { 
-  totalEarned: number; 
+}: {
+  totalEarned: number;
   title?: string;
   productsUrl?: string;
   marketplaceUrl?: string;
 }) => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
-  const tiers = [
-    { id: 0, name: 'tier_beginner', min: 0, max: 100000, color: 'text-orange-700', bg: 'bg-orange-700', badgeFrom: 'from-orange-500', badgeTo: 'to-orange-800', icon: Shield },
-    { id: 1, name: 'tier_silver', min: 100000, max: 1000000, color: 'text-gray-400', bg: 'bg-gray-400', badgeFrom: 'from-gray-300', badgeTo: 'to-gray-500', icon: Medal },
-    { id: 2, name: 'tier_gold', min: 1000000, max: 10000000, color: 'text-yellow-500', bg: 'bg-yellow-500', badgeFrom: 'from-yellow-400', badgeTo: 'to-amber-500', icon: Star },
-    { id: 3, name: 'tier_platine', min: 10000000, max: 20000000, color: 'text-indigo-500', bg: 'bg-indigo-500', badgeFrom: 'from-indigo-400', badgeTo: 'to-indigo-600', icon: Crown }
-  ];
+  const Arrow = isRtl ? ArrowLeft : ArrowRight;
+  const reduced = !!useReducedMotion();
 
-  // Calculate overall percentage for the runner (0 to 100%)
-  // Since we have 4 segments, each tier takes up exactly 25% of the visual bar.
-  let overallPercentage = 0;
-  
-  if (totalEarned >= tiers[3].min) {
-    // In Platine
-    const progressInTier = Math.min((totalEarned - tiers[3].min) / (tiers[3].max - tiers[3].min), 1);
-    overallPercentage = 75 + (progressInTier * 25);
-  } else if (totalEarned >= tiers[2].min) {
-    // In Gold
-    const progressInTier = (totalEarned - tiers[2].min) / (tiers[2].max - tiers[2].min);
-    overallPercentage = 50 + (progressInTier * 25);
-  } else if (totalEarned >= tiers[1].min) {
-    // In Silver
-    const progressInTier = (totalEarned - tiers[1].min) / (tiers[1].max - tiers[1].min);
-    overallPercentage = 25 + (progressInTier * 25);
-  } else {
-    // In Débutant
-    const progressInTier = totalEarned / tiers[0].max;
-    overallPercentage = progressInTier * 25;
-  }
+  // The highest tier whose threshold has been reached.
+  const currentIndex = TIERS.reduce((acc, tier, i) => (totalEarned >= tier.min ? i : acc), 0);
+  const current = TIERS[currentIndex];
+  const next = TIERS[currentIndex + 1] ?? null;
+  const span = next ? next.min - current.min : 1;
+  const progressInTier = next ? Math.min(Math.max((totalEarned - current.min) / span, 0), 1) : 1;
+  const remaining = next ? Math.max(next.min - totalEarned, 0) : 0;
+  const CurrentIcon = current.icon;
 
-  // Cap at 100%
-  overallPercentage = Math.min(Math.max(overallPercentage, 0), 100);
+  const earnedShown = useCountUp(totalEarned, 1.6, reduced);
+  const remainingShown = useCountUp(remaining, 1.6, reduced);
+  const percentShown = useCountUp(Math.round(progressInTier * 100), 1.4, reduced);
+
+  // Reusable "breathing" for glows — a slow opacity swell.
+  const breathe = reduced
+    ? {}
+    : { animate: { opacity: [0.55, 1, 0.55], scale: [0.96, 1.06, 0.96] }, transition: { duration: 3.6, repeat: Infinity, ease: 'easeInOut' } };
 
   return (
-    <div className="bg-slate-900 rounded-[2.5rem] py-6 px-8 md:py-8 md:px-12 border border-slate-800 shadow-2xl relative overflow-hidden mb-8">
-      {/* Background decorations */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-[radial-gradient(circle_at_center,#f59e0b_0%,transparent_70%)] opacity-30 blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-[radial-gradient(circle_at_center,#6366f1_0%,transparent_70%)] opacity-30 blur-3xl" />
-      </div>
+    <motion.div
+      initial={reduced ? false : { opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+      /* Near-opaque on purpose: a translucent card lets its own drop shadow
+         show through from underneath, which reads as a dirty grey surface.
+         The shadow itself is light and tight — a hint of lift, not a bar. */
+      className="relative overflow-hidden rounded-[1.75rem] bg-white/95 ring-1 ring-slate-200/70 shadow-[0_12px_32px_-20px_rgba(17,19,68,0.18)] mb-8"
+    >
+      {/* Colour washes: the current tier's on the hero side, brand navy on the
+          other, both drifting slowly so the surface never looks printed. Kept
+          faint — at full strength the tier colour looked like a stain in the
+          corner rather than light. */}
+      <motion.div
+        className={`absolute -top-32 ${isRtl ? '-right-32' : '-left-32'} w-[30rem] h-[30rem] rounded-full blur-3xl pointer-events-none opacity-50`}
+        style={{ background: `radial-gradient(circle at center, ${current.glow} 0%, transparent 65%)` }}
+        animate={reduced ? undefined : { x: [0, 30, 0], y: [0, 18, 0] }}
+        transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <motion.div
+        className={`absolute -bottom-40 ${isRtl ? '-left-24' : '-right-24'} w-[26rem] h-[26rem] rounded-full blur-3xl pointer-events-none bg-[radial-gradient(circle_at_center,rgba(44,47,116,0.10)_0%,transparent_65%)]`}
+        animate={reduced ? undefined : { x: [0, -26, 0], y: [0, -14, 0] }}
+        transition={{ duration: 17, repeat: Infinity, ease: 'easeInOut' }}
+      />
 
-      <div className="relative z-10">
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/10">
-              <span className="text-xl">🚀</span>
-              <span className="text-xs font-black uppercase tracking-widest text-white">{title || t('tier_banner_title', 'dashboard')}</span>
-            </div>
-            <h2 className="text-white text-3xl font-black uppercase tracking-tight">{t('tier_banner_evolution', 'dashboard')}</h2>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Link to={productsUrl} className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-2xl text-xs font-black text-white transition-all">
-              <Package className="w-3.5 h-3.5" /> {t('nav_my_products', 'dashboard')}
-            </Link>
-            <Link to={marketplaceUrl} className="flex items-center gap-2 px-6 py-3 bg-white text-slate-900 rounded-2xl text-xs font-black hover:shadow-2xl transition-all">
-              <ShoppingBag className="w-3.5 h-3.5" /> {t('nav_public_market', 'dashboard')}
-            </Link>
-          </div>
-        </div>
+      <div className="relative grid grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        {/* ─────────────── Hero: the rank you hold ─────────────── */}
+        <div className="p-6 md:p-8 lg:border-r border-slate-200/60 flex flex-col">
+          <motion.div
+            initial={reduced ? false : { opacity: 0, x: isRtl ? 10 : -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.15, duration: 0.5 }}
+            className="inline-flex items-center gap-2 h-7 px-3 rounded-full bg-white/80 ring-1 ring-inset ring-slate-200 self-start"
+          >
+            <motion.span
+              animate={reduced ? undefined : { rotate: [0, 20, -12, 0], scale: [1, 1.15, 1] }}
+              transition={{ duration: 3, repeat: Infinity, repeatDelay: 2.5, ease: 'easeInOut' }}
+              className="inline-flex"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-primary-500" />
+            </motion.span>
+            <span className="text-[11px] font-semibold text-slate-600">{title || t('tier_banner_title', 'dashboard')}</span>
+          </motion.div>
 
-        {/* Badges Container */}
-        <div className={`flex justify-between items-end mb-6 relative px-4 md:px-8 ${isRtl ? 'flex-row-reverse' : ''}`}>
-          {tiers.map((tier, index) => {
-            const isUnlocked = totalEarned >= tier.min;
-            const isCurrent = totalEarned >= tier.min && totalEarned < tier.max;
-            // The last tier is current if earned > min
-            const isActuallyCurrent = index === tiers.length - 1 ? totalEarned >= tier.min : isCurrent;
-            const Icon = tier.icon;
-
-            return (
-              <div key={tier.id} className="flex flex-col items-center relative w-1/4">
-                <motion.div 
-                   initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                  className={`relative z-10 flex flex-col items-center transition-all duration-500 ${isUnlocked ? 'scale-110' : 'scale-90 opacity-50 grayscale'}`}
-                >
-                  {/* Badge shape */}
-                  <div className={`w-16 h-20 md:w-20 md:h-24 bg-gradient-to-br ${tier.badgeFrom} ${tier.badgeTo} rounded-t-full rounded-b-xl flex flex-col items-center justify-center shadow-lg border border-white/10 ring-2 ring-white/20`}>
-                    <Icon className="w-6 h-6 md:w-8 md:h-8 text-white drop-shadow-md mb-1" />
-                    <span className="text-[10px] md:text-xs font-black text-white uppercase tracking-wider drop-shadow-md">{t(tier.name, 'dashboard')}</span>
-                    <span className="text-[8px] md:text-[10px] font-bold text-white/80">{tier.min === 0 ? '0' : tier.min >= 1000000 ? `${(tier.min / 1000000).toFixed(0)}M` : `${(tier.min / 1000).toFixed(0)}K`}</span>
-                  </div>
-                  {/* Ribbon tails */}
-                  <div className="absolute -bottom-2 flex gap-1 z-[-1]">
-                    <div className={`w-4 h-6 bg-gradient-to-b ${tier.badgeFrom} ${tier.badgeTo} transform -skew-y-[20deg] rounded-bl-sm`} />
-                    <div className={`w-4 h-6 bg-gradient-to-b ${tier.badgeFrom} ${tier.badgeTo} transform skew-y-[20deg] rounded-br-sm`} />
-                  </div>
-                </motion.div>
-                
-                {isActuallyCurrent && (
-                  <div className="absolute -bottom-8 md:-bottom-10">
-                    <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-white text-[10px] font-bold border border-white/20 whitespace-nowrap animate-pulse">
-                      {t('tier_banner_current_position', 'dashboard')}
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Progress Bar Container */}
-        <div className="relative mt-12 px-4 md:px-8" style={{ direction: 'ltr' }}>
-          {/* Base empty track */}
-          <div className="h-4 bg-slate-800 rounded-full w-full overflow-hidden flex shadow-inner">
-            {tiers.map((tier, index) => (
-              <div key={tier.id} className="h-full flex-1 border-r border-slate-700/50 last:border-0" />
-            ))}
-          </div>
-
-          {/* Filled track */}
-          <div className="absolute top-0 left-4 right-4 md:left-8 md:right-8 h-4 rounded-full overflow-hidden pointer-events-none flex">
-            {tiers.map((tier, index) => {
-              const minPercent = index * 25;
-              const maxPercent = (index + 1) * 25;
-              let slotPercentage = 0;
-              if (overallPercentage >= maxPercent) {
-                slotPercentage = 100;
-              } else if (overallPercentage <= minPercent) {
-                slotPercentage = 0;
-              } else {
-                slotPercentage = ((overallPercentage - minPercent) / 25) * 100;
-              }
-
-              return (
-                <div key={tier.id} className="h-full flex-1 relative overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${slotPercentage}%` }}
-                    transition={{ duration: 1.5, ease: "easeOut" }}
-                    className={`h-full ${tier.bg}`}
+          <div className="flex items-center gap-5 mt-5">
+            {/* Big medal: turning conic ring, breathing halo, orbiting sparks,
+                a light sweep, and a gentle float. */}
+            <motion.div
+              className="relative shrink-0"
+              animate={reduced ? undefined : { y: [0, -5, 0] }}
+              transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <motion.div
+                className="absolute -inset-5 rounded-full blur-xl pointer-events-none"
+                style={{ background: `radial-gradient(circle at center, ${current.glow} 0%, transparent 70%)` }}
+                {...breathe}
+              />
+              <motion.div
+                className="absolute -inset-1.5 rounded-full"
+                style={{ background: `conic-gradient(from 0deg, ${current.glow}, transparent 40%, ${current.glow} 70%, transparent)` }}
+                animate={reduced ? undefined : { rotate: 360 }}
+                transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+              />
+              <div className="absolute -inset-1.5 rounded-full bg-white/70 backdrop-blur-sm" />
+              {!reduced && <Sparks colour={current.spark} />}
+              <motion.div
+                initial={reduced ? false : { scale: 0.6, opacity: 0, rotate: -20 }}
+                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                transition={{ type: 'spring', stiffness: 220, damping: 16, delay: 0.2 }}
+                whileHover={reduced ? undefined : { scale: 1.06, rotate: 4, transition: HOVER }}
+                className={`relative w-[88px] h-[88px] rounded-full bg-gradient-to-br ${current.medal} flex items-center justify-center shadow-xl ring-4 ring-white overflow-hidden`}
+              >
+                {/* Light sweep across the medal face */}
+                {!reduced && (
+                  <motion.span
+                    className="absolute inset-y-0 w-10 bg-gradient-to-r from-transparent via-white/70 to-transparent skew-x-[-20deg] pointer-events-none"
+                    initial={{ x: -80 }}
+                    animate={{ x: 130 }}
+                    transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 3.4, ease: 'easeInOut', delay: 1 }}
                   />
-                </div>
+                )}
+                <motion.span
+                  animate={reduced ? undefined : { scale: [1, 1.08, 1] }}
+                  transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                  className="inline-flex"
+                >
+                  <CurrentIcon className={`w-9 h-9 ${current.ink} drop-shadow`} />
+                </motion.span>
+              </motion.div>
+            </motion.div>
+
+            <div className="min-w-0">
+              <motion.p
+                initial={reduced ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+                className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400"
+              >
+                {t('tier_banner_evolution', 'dashboard')}
+              </motion.p>
+              <motion.p
+                initial={reduced ? false : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35, type: 'spring', stiffness: 200, damping: 18 }}
+                className={`text-3xl font-bold tracking-tight leading-none mt-1 ${current.text}`}
+              >
+                {t(current.name, 'dashboard')}
+              </motion.p>
+              <motion.p
+                initial={reduced ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.45 }}
+                className="text-sm text-slate-500 mt-2"
+              >
+                <span className="font-semibold text-slate-900 tabular-nums">{earnedShown.toLocaleString()} DH</span>{' '}
+                {t('tier_earned', 'dashboard', 'gagnés au total')}
+              </motion.p>
+            </div>
+          </div>
+
+          {/* Progress to the NEXT rank only — the one number that matters */}
+          <motion.div
+            initial={reduced ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="mt-6"
+          >
+            <div className="flex items-baseline justify-between gap-3 text-xs">
+              {next ? (
+                <>
+                  <span className="text-slate-500">
+                    {t('tier_next', 'dashboard', 'Prochain palier')}{' '}
+                    <span className={`font-semibold ${next.text}`}>{t(next.name, 'dashboard')}</span>
+                  </span>
+                  <span className="font-semibold text-slate-900 tabular-nums">
+                    {remainingShown.toLocaleString()} DH {t('tier_remaining', 'dashboard', 'restants')}
+                  </span>
+                </>
+              ) : (
+                <span className="font-semibold text-slate-900">{t('tier_max', 'dashboard', 'Palier maximum atteint')}</span>
+              )}
+            </div>
+            <div className="mt-2 h-2.5 rounded-full bg-slate-200/70 overflow-hidden ring-1 ring-inset ring-white/60 relative">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.max(progressInTier * 100, 1.5)}%` }}
+                transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1], delay: 0.4 }}
+                className={`h-full rounded-full bg-gradient-to-r ${current.bar} relative overflow-hidden`}
+              >
+                {/* Shimmer travelling along the fill */}
+                {!reduced && (
+                  <motion.span
+                    className="absolute inset-y-0 w-16 bg-gradient-to-r from-transparent via-white/60 to-transparent"
+                    initial={{ x: '-100%' }}
+                    animate={{ x: '400%' }}
+                    transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 1.6, ease: 'easeInOut', delay: 2 }}
+                  />
+                )}
+              </motion.div>
+              {/* Glowing head of the bar */}
+              {!reduced && next && (
+                <motion.span
+                  className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full -ml-1.5"
+                  style={{ background: current.spark, boxShadow: `0 0 12px 2px ${current.spark}` }}
+                  initial={{ left: '0%', opacity: 0 }}
+                  animate={{ left: `${Math.max(progressInTier * 100, 1.5)}%`, opacity: [0, 1, 0.6, 1] }}
+                  transition={{ left: { duration: 1.6, ease: [0.16, 1, 0.3, 1], delay: 0.4 }, opacity: { duration: 2.4, repeat: Infinity, ease: 'easeInOut', delay: 2 } }}
+                />
+              )}
+            </div>
+            <div className="flex justify-between mt-1.5 text-[10px] font-medium text-slate-400 tabular-nums">
+              <span>{compact(current.min)}</span>
+              <span>{percentShown}%</span>
+              <span>{next ? compact(next.min) : '∞'}</span>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={reduced ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="flex flex-wrap items-center gap-2.5 mt-6"
+          >
+            <motion.div whileHover={reduced ? undefined : { y: -2, transition: HOVER }} whileTap={{ scale: 0.97, transition: TAP }}>
+              <Link
+                to={productsUrl}
+                className="flex items-center gap-2 h-10 px-4 rounded-xl bg-white ring-1 ring-inset ring-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors duration-150"
+              >
+                <Package className="w-3.5 h-3.5 text-slate-400" /> {t('nav_my_products', 'dashboard')}
+              </Link>
+            </motion.div>
+            <motion.div whileHover={reduced ? undefined : { y: -2, transition: HOVER }} whileTap={{ scale: 0.97, transition: TAP }} className="group">
+              <Link
+                to={marketplaceUrl}
+                className="flex items-center gap-2 h-10 px-4 rounded-xl bg-gradient-to-r from-primary-700 to-primary-500 text-white text-xs font-semibold shadow-lg shadow-primary-600/25 hover:brightness-105 transition"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" /> {t('nav_public_market', 'dashboard')}
+                <Arrow className={`w-3.5 h-3.5 opacity-70 transition-transform ${isRtl ? 'group-hover:-translate-x-0.5' : 'group-hover:translate-x-0.5'}`} />
+              </Link>
+            </motion.div>
+          </motion.div>
+        </div>
+
+        {/* ─────────────── Path: the four ranks as steps ─────────────── */}
+        <div className="p-6 md:p-8 relative flex flex-col">
+          <motion.div
+            initial={reduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="flex items-center justify-between mb-4"
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              {t('tier_path', 'dashboard', 'Parcours des paliers')}
+            </p>
+            <span className="text-[11px] font-medium text-slate-400 tabular-nums">
+              {currentIndex + 1} / {TIERS.length}
+            </span>
+          </motion.div>
+
+          {/* The four ranks, each step a little higher than the last */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end flex-1" dir={isRtl ? 'rtl' : 'ltr'}>
+            {TIERS.map((tier, i) => {
+              const unlocked = i <= currentIndex;
+              const isCurrent = i === currentIndex;
+              const Icon = tier.icon;
+              return (
+                <motion.div
+                  key={tier.id}
+                  initial={reduced ? false : { y: 28, opacity: 0, scale: 0.92 }}
+                  animate={{ y: 0, opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.35 + 0.12 * i, type: 'spring', stiffness: 240, damping: 20 }}
+                  whileHover={reduced ? undefined : { y: -6, scale: 1.03, transition: HOVER }}
+                  // Each step sits a little higher than the last: a staircase.
+                  style={{ marginBottom: `${i * 10}px` }}
+                  className={`relative flex flex-col items-center text-center rounded-2xl p-4 pt-3 transition-shadow cursor-default ${
+                    isCurrent
+                      ? 'bg-white ring-2 ring-primary-500/70 shadow-[0_18px_40px_-20px_rgba(44,47,116,0.5)]'
+                      : unlocked
+                      ? 'bg-white/80 ring-1 ring-inset ring-white hover:shadow-[0_18px_40px_-22px_rgba(17,19,68,0.35)]'
+                      : 'bg-white/40 ring-1 ring-inset ring-slate-200/70 hover:bg-white/70'
+                  }`}
+                >
+                  {/* Medal */}
+                  <motion.div
+                    className="relative"
+                    animate={isCurrent && !reduced ? { y: [0, -3, 0] } : undefined}
+                    transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    {unlocked && (
+                      <motion.div
+                        className="absolute -inset-2 rounded-full blur-lg pointer-events-none"
+                        style={{ background: `radial-gradient(circle at center, ${tier.glow} 0%, transparent 70%)` }}
+                        {...breathe}
+                        transition={{ duration: 3.6 + i * 0.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
+                      />
+                    )}
+                    <motion.div
+                      initial={reduced ? false : { rotateY: 90 }}
+                      animate={{ rotateY: 0 }}
+                      transition={{ delay: 0.55 + 0.12 * i, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                      className={`relative w-14 h-14 rounded-full flex items-center justify-center overflow-hidden ${
+                        unlocked
+                          ? `bg-gradient-to-br ${tier.medal} shadow-md ring-2 ring-white`
+                          : `bg-white ring-2 ${tier.ring}`
+                      }`}
+                    >
+                      {unlocked && !reduced && (
+                        <motion.span
+                          className="absolute inset-y-0 w-6 bg-gradient-to-r from-transparent via-white/70 to-transparent skew-x-[-20deg] pointer-events-none"
+                          initial={{ x: -50 }}
+                          animate={{ x: 90 }}
+                          transition={{ duration: 1.4, repeat: Infinity, repeatDelay: 4 + i, ease: 'easeInOut', delay: 2 + i * 0.6 }}
+                        />
+                      )}
+                      <motion.span
+                        className="inline-flex"
+                        whileHover={!unlocked && !reduced ? { rotate: [0, -12, 12, -6, 0], transition: { duration: 0.35, ease: 'easeInOut' } } : undefined}
+                      >
+                        <Icon className={`w-6 h-6 ${unlocked ? tier.ink : `${tier.text} opacity-70`}`} />
+                      </motion.span>
+                    </motion.div>
+                    {/* State pin pops in after the medal */}
+                    <motion.span
+                      initial={reduced ? false : { scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.95 + 0.12 * i, type: 'spring', stiffness: 400, damping: 14 }}
+                      className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ring-2 ring-white ${
+                        isCurrent ? 'bg-primary-600 text-white' : unlocked ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'
+                      }`}
+                    >
+                      {unlocked ? <Check className="w-3 h-3" strokeWidth={3} /> : <Lock className="w-2.5 h-2.5" />}
+                    </motion.span>
+                  </motion.div>
+
+                  <p className={`mt-3 text-[13px] font-semibold ${unlocked ? 'text-slate-900' : 'text-slate-500'}`}>
+                    {t(tier.name, 'dashboard')}
+                  </p>
+                  <p className={`text-[11px] font-medium tabular-nums ${unlocked ? tier.text : 'text-slate-400'}`}>
+                    {tier.min === 0 ? '0 DH' : `${compact(tier.min)} DH`}
+                  </p>
+
+                  <motion.span
+                    animate={isCurrent && !reduced ? { scale: [1, 1.06, 1] } : undefined}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    className={`mt-2.5 inline-flex items-center h-5 px-2 rounded-full text-[10px] font-semibold ${
+                      isCurrent
+                        ? 'bg-primary-600 text-white shadow-md shadow-primary-600/30'
+                        : unlocked
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : `${tier.soft} ${tier.text}`
+                    }`}
+                  >
+                    {isCurrent
+                      ? t('tier_banner_current_position', 'dashboard')
+                      : unlocked
+                      ? t('tier_unlocked', 'dashboard', 'Débloqué')
+                      : t('tier_locked', 'dashboard', 'Verrouillé')}
+                  </motion.span>
+                </motion.div>
               );
             })}
           </div>
-
-          {/* Runner Track (same left/right offsets as the filled track) */}
-          <div className="absolute top-0 h-4 left-4 right-4 md:left-8 md:right-8 pointer-events-none">
-            {/* Runner Icon */}
-            <motion.div 
-              initial={{ left: '0%' }}
-              animate={{ left: `${overallPercentage}%` }}
-              transition={{ duration: 1.5, ease: "easeOut" }}
-              className="absolute top-1/2 -translate-y-1/2 z-20 group cursor-pointer -ml-2.5 md:-ml-3 pointer-events-auto"
-            >
-              <motion.div 
-                animate={{
-                  boxShadow: [
-                    "0 0 6px rgba(249,115,22,0.4)",
-                    "0 0 16px rgba(249,115,22,0.9)",
-                    "0 0 6px rgba(249,115,22,0.4)"
-                  ],
-                  scale: [1, 1.12, 1]
-                }}
-                transition={{
-                  duration: 2.2,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-                className="w-5 h-5 md:w-6 md:h-6 bg-white rounded-full flex items-center justify-center border-[2px] border-orange-500"
-              >
-                <Flame className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 text-orange-500 fill-orange-500 animate-pulse" />
-              </motion.div>
-
-              {/* Tooltip */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-30">
-                <div className="bg-slate-800 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg whitespace-nowrap shadow-xl border border-slate-700">
-                  {totalEarned.toLocaleString()} DH
-                  {/* Tooltip Arrow */}
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-slate-800" />
-                </div>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Markers / Labels */}
-          <div className="flex justify-between mt-4 relative z-10">
-            <div className="flex flex-col w-1/4 items-start">
-               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider -ml-2">0 DH</span>
-            </div>
-            <div className="flex flex-col items-center w-1/4 relative">
-               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute -left-4">100K</span>
-            </div>
-            <div className="flex flex-col items-center w-1/4 relative">
-               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute -left-3">1M</span>
-            </div>
-            <div className="flex flex-col w-1/4 relative items-end">
-               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider absolute -left-4">10M</span>
-               <span className="text-[10px] md:text-xs font-black text-slate-500 tracking-wider -mr-2">+</span>
-            </div>
-          </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };

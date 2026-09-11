@@ -129,7 +129,7 @@ interface LanguageContextType {
   t: (key: string, namespace?: Namespaces, fallbackValue?: string) => string;
 }
 
-const LanguageContext = createContext<LanguageContextType | null>(null);
+export const LanguageContext = createContext<LanguageContextType | null>(null);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const { user, refreshUser } = useAuth();

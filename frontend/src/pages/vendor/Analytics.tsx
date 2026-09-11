@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils';
 import { useState } from 'react';
+import { BarChart3 } from 'lucide-react';
+import PageHeader from '../../components/common/PageHeader';
 
 export default function VendorAnalytics() {
   const [dateRange, setDateRange] = useState('30d');
@@ -26,22 +28,23 @@ export default function VendorAnalytics() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-          <p className="text-gray-500 mt-1">Analysez vos performances</p>
-        </div>
-        <select
-          className="input w-40"
-          value={dateRange}
-          onChange={(e) => setDateRange(e.target.value)}
-        >
-          <option value="7d">7 derniers jours</option>
-          <option value="30d">30 derniers jours</option>
-          <option value="90d">90 derniers jours</option>
-          <option value="1y">Cette année</option>
-        </select>
-      </div>
+      <PageHeader
+        icon={BarChart3}
+        title="Analytics"
+        subtitle="Analysez vos performances"
+        actions={
+          <select
+            className="input w-40"
+            value={dateRange}
+            onChange={(e) => setDateRange(e.target.value)}
+          >
+            <option value="7d">7 derniers jours</option>
+            <option value="30d">30 derniers jours</option>
+            <option value="90d">90 derniers jours</option>
+            <option value="1y">Cette année</option>
+          </select>
+        }
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

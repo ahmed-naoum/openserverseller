@@ -81,5 +81,15 @@
   "enter_6_digits": "Please enter the 6-digit code",
   "email_verified_success": "Email verified successfully!",
   "email_already_exists": "This email is already used by another account",
-  "phone_already_exists": "This phone number is already in use"
+  "phone_already_exists": "This phone number is already in use",
+  "store_name_label": "Your store name",
+  "store_name_placeholder": "my-store",
+  "store_name_hint": "Your store is created automatically at this address. You can change it later.",
+  "store_name_required": "Store name is required",
+  "store_name_length": "Between 3 and 30 characters",
+  "store_name_invalid": "Lowercase letters, numbers and hyphens only",
+  "store_name_available": "Available!",
+  "store_name_taken": "This name is already taken",
+  "store_name_reserved": "This name is reserved",
+  "store_name_blocked": "This name contains a forbidden word"
 }

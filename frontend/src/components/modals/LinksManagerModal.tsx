@@ -10,6 +10,7 @@ import { RefreshCw, Copy, QrCode, Power, Plus, Package, AlertCircle, Wand2 } fro
 import toast from 'react-hot-toast';
 import { currentBasePath } from '../../lib/dashboardBase';
 import { canUseLinkBuilder } from '../../lib/subAccountPermissions';
+import { SweetAlertCard } from '../ui/SweetAlert';
 
 export interface LinksManagerConfig {
   isOpen: boolean;
@@ -488,45 +489,18 @@ export default function LinksManagerModal({
         </div>
       )}
 
-      {/* Confirmation Sub-Modal */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[1000000] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div className="p-8 text-center">
-              <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center bg-slate-50">
-                {confirmModal.icon}
-              </div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-3">
-                {confirmModal.title}
-              </h2>
-              <p className="text-sm text-slate-500 font-medium leading-relaxed mb-6">
-                {confirmModal.message}
-              </p>
-            </div>
-            <div className="p-8 bg-slate-50/50 flex gap-4">
-              <button
-                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                disabled={confirmModal.isLoading}
-                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-white border border-slate-100 rounded-2xl transition-all disabled:opacity-50"
-              >
-                {t('btn_cancel', 'links', 'Annuler')}
-              </button>
-              <button
-                onClick={confirmModal.onConfirm}
-                disabled={confirmModal.isLoading}
-                className={`flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
-                  confirmModal.variant === 'danger' ? 'bg-red-500 hover:bg-red-600' : 'bg-slate-900 hover:bg-slate-800'
-                }`}
-              >
-                {confirmModal.isLoading && (
-                  <RefreshCw size={14} className="animate-spin" />
-                )}
-                {confirmModal.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SweetAlertCard
+        open={confirmModal.isOpen}
+        type={confirmModal.variant === 'danger' ? 'danger' : 'question'}
+        icon={confirmModal.icon}
+        title={confirmModal.title}
+        text={confirmModal.message}
+        loading={!!confirmModal.isLoading}
+        cancelText={t('btn_cancel', 'links', 'Annuler')}
+        confirmText={confirmModal.confirmText}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+      />
     </>,
     document.body
   );

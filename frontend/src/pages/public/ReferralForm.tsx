@@ -10,6 +10,7 @@ import WhatsAppWidget from '../../components/public/WhatsAppWidget';
 import { getCloakingConfig, needsGeoLookup, resolveGeoCloakRedirect, resolveInstantCloakRedirect } from '../../utils/cloaking';
 import { writeOrderHandoff, thankYouPath } from '../../utils/orderHandoff';
 import { makeCapiEventId, readCookie, fbcValue } from '../../utils/capi';
+import { flatBlocks, settingsOf } from '@shared/document/migrate.js';
 
 const getNoScriptUrl = (pixel: any) => {
   const platform = (pixel.platform || 'META').toUpperCase();
@@ -207,9 +208,8 @@ export default function ReferralForm() {
     return () => clearTimeout(t);
   }, [form, socket, code, data]);
 
-  const findCheckoutBlock = (structure: any) => {
-    if (!structure || !structure.blocks) return null;
-    return structure.blocks.find((b: any) => b.type === 'express_checkout');
+  const findCheckoutBlock = (structure: any): any => {
+    return flatBlocks(structure).find((b: any) => b.type === 'express_checkout') || null;
   };
 
   useEffect(() => {
@@ -448,74 +448,101 @@ export default function ReferralForm() {
     if (!data?.pixels || !Array.isArray(data.pixels)) return [];
     
     const matchingSinglePixels = data.pixels.filter((p: any) => p.type === 'SINGLE' && p.targetIds?.includes(code));
-    
-    if (matchingSinglePixels.length > 0) {
-      return matchingSinglePixels;
+    const candidatePixels = matchingSinglePixels.length > 0
+      ? matchingSinglePixels
+      : data.pixels.filter((p: any) => p.type === 'GLOBAL' || !p.type);
+
+    const seen = new Set<string>();
+    const result: any[] = [];
+    for (const p of candidatePixels) {
+      const platform = String(p?.platform || 'META').toUpperCase();
+      const pixelId = String(p?.pixelId || '').trim();
+      if (!pixelId) continue;
+      const key = `${platform}:${pixelId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({
+        ...p,
+        platform,
+        pixelId,
+        conversionEvent: p?.conversionEvent || 'Lead'
+      });
     }
-    
-    return data.pixels.filter((p: any) => p.type === 'GLOBAL');
+    return result;
   }, [data, code]);
 
   // Multi-platform Pixel Injection
   useEffect(() => {
-    if (activePixels.length > 0) {
-      activePixels.forEach((pixel: any) => {
-        if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !activePixels.length) return;
+    const w = window as any;
 
-        const platform = (pixel.platform || 'META').toUpperCase();
+    const metaPixels = activePixels.filter((p: any) => (p.platform || 'META').toUpperCase() === 'META' && p.pixelId);
+    const googlePixels = activePixels.filter((p: any) => (p.platform || '').toUpperCase() === 'GOOGLE' && p.pixelId);
+    const tiktokPixels = activePixels.filter((p: any) => (p.platform || '').toUpperCase() === 'TIKTOK' && p.pixelId);
+    const snapPixels = activePixels.filter((p: any) => (p.platform || '').toUpperCase() === 'SNAPCHAT' && p.pixelId);
 
-        if (platform === 'META') {
-          if (!(window as any).fbq) {
-            // @ts-ignore
-            !function(f,b,e,v,n,t,s)
-            // @ts-ignore
-            {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-            // @ts-ignore
-            n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-            // @ts-ignore
-            if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-            // @ts-ignore
-            n.queue=[];t=b.createElement(e);t.async=!0;
-            // @ts-ignore
-            t.src=v;b.head.appendChild(t)}(window, document,'script',
-            'https://connect.facebook.net/en_US/fbevents.js');
-          }
-
-          (window as any).fbq('init', pixel.pixelId);
-          (window as any).fbq('track', 'PageView');
-
-        } else if (platform === 'GOOGLE') {
-          const script = document.createElement('script');
-          script.async = true;
-          script.src = `https://www.googletagmanager.com/gtag/js?id=${pixel.pixelId}`;
-          document.head.appendChild(script);
-
-          (window as any).dataLayer = (window as any).dataLayer || [];
-          function gtag(){ (window as any).dataLayer.push(arguments); }
-          (window as any).gtag = gtag;
-          // @ts-ignore
-          gtag('js', new Date());
-          // @ts-ignore
-          gtag('config', pixel.pixelId);
-
-        } else if (platform === 'TIKTOK') {
-          // @ts-ignore
-          !function (w, d, t) {
-            // @ts-ignore
-            w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};var n=document.createElement("script");n.type="text/javascript",n.async=!0,n.src=r+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(n,a)};
-            ttq.load(pixel.pixelId);
-            ttq.page();
-          }(window, document, 'ttq');
-
-        } else if (platform === 'SNAPCHAT') {
-          // @ts-ignore
-          !function(e,t,n){if(e.snaptr)return;var r=e.snaptr=function(){r.handleRequest?r.handleRequest.apply(r,arguments):r.queue.push(arguments)};r.queue=[];var a=t.createElement(n);a.async=!0;a.src="https://sc-static.net/scevent.min.js";var s=t.getElementsByTagName(n)[0];s.parentNode.insertBefore(a,s)}(window,document,"script");
-          // @ts-ignore
-          snaptr('init', pixel.pixelId);
-          // @ts-ignore
-          snaptr('track', 'PAGE_VIEW');
-        }
+    if (metaPixels.length > 0) {
+      if (!w.fbq) {
+        // @ts-ignore
+        !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+        // @ts-ignore
+        n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+        // @ts-ignore
+        if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+        // @ts-ignore
+        n.queue=[];t=b.createElement(e);t.async=!0;
+        // @ts-ignore
+        t.src=v;b.head.appendChild(t)}(window, document,'script',
+        'https://connect.facebook.net/en_US/fbevents.js');
+      }
+      metaPixels.forEach((p: any) => {
+        w.fbq('init', p.pixelId);
       });
+      w.fbq('track', 'PageView');
+    }
+
+    if (googlePixels.length > 0) {
+      w.dataLayer = w.dataLayer || [];
+      function gtag(){ w.dataLayer.push(arguments); }
+      w.gtag = gtag;
+      // @ts-ignore
+      gtag('js', new Date());
+
+      googlePixels.forEach((p: any) => {
+        const script = document.createElement('script');
+        script.async = true;
+        script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(p.pixelId)}`;
+        document.head.appendChild(script);
+        // @ts-ignore
+        gtag('config', p.pixelId);
+      });
+    }
+
+    if (tiktokPixels.length > 0) {
+      if (!w.ttq) {
+        // @ts-ignore
+        !function (w, d, t) {
+          // @ts-ignore
+          w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};var a=document.createElement("script");a.type="text/javascript",a.async=!0,a.src=r+"?sdkid="+e+"&lib="+t;var s=document.getElementsByTagName("script")[0];s.parentNode.insertBefore(a,s)};
+        }(window, document, 'ttq');
+      }
+      tiktokPixels.forEach((p: any) => {
+        w.ttq.load(p.pixelId);
+      });
+      w.ttq.page();
+    }
+
+    if (snapPixels.length > 0) {
+      if (!w.snaptr) {
+        // @ts-ignore
+        !function(e,t,n){if(e.snaptr)return;var r=e.snaptr=function(){r.handleRequest?r.handleRequest.apply(r,arguments):r.queue.push(arguments)};r.queue=[];var a=t.createElement(n);a.async=!0;a.src="https://sc-static.net/scevent.min.js";var s=t.getElementsByTagName(n)[0];s.parentNode.insertBefore(a,s)}(window,document,"script");
+      }
+      snapPixels.forEach((p: any) => {
+        // @ts-ignore
+        snaptr('init', p.pixelId);
+      });
+      // @ts-ignore
+      snaptr('track', 'PAGE_VIEW');
     }
   }, [activePixels]);
 
@@ -704,28 +731,62 @@ export default function ReferralForm() {
       socket?.emit('checkout:complete', { code });
 
       // Track browser conversion event immediately upon checkout submit
-      if (data?.pixels && data.pixels.length && typeof window !== 'undefined') {
+      if (activePixels && activePixels.length && typeof window !== 'undefined') {
         const w = window as any;
-        data.pixels.forEach((pixel: any) => {
+        const val = Number.isFinite(unitPrice) ? unitPrice : undefined;
+        let hasTikTok = false;
+        let hasSnap = false;
+        let hasGoogle = false;
+        let tiktokEvent = 'CompletePayment';
+        let snapEvent = 'PURCHASE';
+
+        activePixels.forEach((pixel: any) => {
           const platform = (pixel.platform || 'META').toUpperCase();
           const eventName = pixel.conversionEvent || 'Purchase';
           try {
             if (platform === 'META' && w.fbq) {
-              w.fbq('track', eventName,
-                Number.isFinite(unitPrice) ? { value: unitPrice, currency: 'MAD' } : {},
-                { eventID: capiEventId }
-              );
-            } else if (platform === 'GOOGLE' && w.gtag) {
-              w.gtag('event', eventName, { event_category: 'conversion', value: unitPrice, currency: 'MAD' });
-            } else if (platform === 'TIKTOK' && w.ttq) {
-              w.ttq.track(eventName === 'Purchase' ? 'CompletePayment' : 'CompleteRegistration', { value: unitPrice, currency: 'MAD' });
-            } else if (platform === 'SNAPCHAT' && w.snaptr) {
-              w.snaptr('track', eventName === 'Purchase' ? 'PURCHASE' : 'SIGN_UP', { price: unitPrice, currency: 'MAD' });
+              if (pixel.pixelId) {
+                w.fbq('trackSingle', pixel.pixelId, eventName,
+                  val != null ? { value: val, currency: 'MAD' } : {},
+                  capiEventId ? { eventID: capiEventId } : undefined
+                );
+              } else {
+                w.fbq('track', eventName,
+                  val != null ? { value: val, currency: 'MAD' } : {},
+                  capiEventId ? { eventID: capiEventId } : undefined
+                );
+              }
+            } else if (platform === 'GOOGLE') {
+              hasGoogle = true;
+            } else if (platform === 'TIKTOK') {
+              hasTikTok = true;
+              if (eventName !== 'Purchase') tiktokEvent = 'CompleteRegistration';
+            } else if (platform === 'SNAPCHAT') {
+              hasSnap = true;
+              if (eventName !== 'Purchase') snapEvent = 'SIGN_UP';
             }
           } catch (e) {
             console.error('[BrowserPixel] track failed:', e);
           }
         });
+
+        if (hasTikTok && w.ttq) {
+          try {
+            w.ttq.track(tiktokEvent, val != null ? { value: val, currency: 'MAD' } : {}, capiEventId ? { event_id: capiEventId } : undefined);
+          } catch (e) {
+            console.error('[TikTokPixel] track failed:', e);
+          }
+        }
+        if (hasSnap && w.snaptr) {
+          try {
+            w.snaptr('track', snapEvent, val != null ? { price: val, currency: 'MAD' } : undefined);
+          } catch (e) {}
+        }
+        if (hasGoogle && w.gtag) {
+          try {
+            w.gtag('event', 'conversion', { event_category: 'conversion', ...(val != null ? { value: val, currency: 'MAD' } : {}) });
+          } catch (e) {}
+        }
       }
 
       const submitBody = submitRes?.data?.status === 'success' ? submitRes.data.data : submitRes?.data;
@@ -1117,8 +1178,13 @@ export default function ReferralForm() {
 };
 
   const structure = landingPage?.customStructure;
-  const blocks = Array.isArray(structure) ? structure : (structure?.blocks || []);
-  const pageSettings = Array.isArray(structure) ? { backgroundColor: '#f9fafb' } : (structure?.settings || { backgroundColor: '#f9fafb' });
+  // The SPA fallback draws the flat list whatever shape the page is stored in.
+  // Real tree structure (columns, styled sections) is the compiler's to draw;
+  // here the blocks simply stack, which is the pre-tree rendering of any page.
+  const blocks = flatBlocks(structure) as any[];
+  const pageSettings: any = Array.isArray(structure)
+    ? { backgroundColor: '#f9fafb' }
+    : { backgroundColor: '#f9fafb', ...settingsOf(structure) };
   const whatsappBlock = blocks.find((b: any) => b.type === 'whatsapp');
   const whatsappSettings = whatsappBlock && whatsappBlock.content.enableWidget !== false ? {
     enabled: true,

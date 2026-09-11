@@ -4,9 +4,12 @@ import {
   Video, Layers, Music, Type, Heading, Space, MessageSquare, Sparkles,
   Search, Plus, Check, ChevronRight, Wand2
 } from 'lucide-react';
+import { PanelTop, PanelBottom } from 'lucide-react';
 import { BlockType, EditorBlock, PageSettings } from './types';
+import { catalogue } from '@shared/blocks/index.js';
 import { STARTER_TEMPLATES } from './templates';
 import toast from 'react-hot-toast';
+import { swal } from '../../../ui/SweetAlert';
 
 interface ComponentLibraryProps {
   onAddBlock: (type: BlockType, targetIndex?: number) => void;
@@ -22,111 +25,50 @@ interface ComponentItem {
   badge?: string;
 }
 
-export const COMPONENT_CATALOG: ComponentItem[] = [
-  // Conversion & Vente
-  {
-    type: 'express_checkout',
-    name: 'Formulaire Checkout (COD)',
-    category: 'conversion',
-    description: 'Formulaire de commande optimisé pour le paiement à la livraison (Multi-packs, villes, prix barré).',
-    icon: <ShoppingCart className="w-4 h-4 text-orange-500" />,
-    badge: 'Essentiel'
-  },
-  {
-    type: 'button',
-    name: 'Bouton d\'Action (CTA)',
-    category: 'conversion',
-    description: 'Bouton d\'achat avec animations de rebond, redirection ou défilement instantané vers le checkout.',
-    icon: <LinkIcon className="w-4 h-4 text-emerald-500" />,
-    badge: 'Sticky'
-  },
-  {
-    type: 'countdown',
-    name: 'Compteur d\'Urgence',
-    category: 'conversion',
-    description: 'Bannière de compte à rebours pour stimuler l\'achat impulsif et créer un sentiment d\'urgence.',
-    icon: <Clock className="w-4 h-4 text-rose-500" />
-  },
-  {
-    type: 'products',
-    name: 'Propositions Produits',
-    category: 'conversion',
-    description: 'Grille ou carrousel dynamique de produits issus de votre catalogue vendeur ou influenceur.',
-    icon: <ShoppingBag className="w-4 h-4 text-amber-500" />
-  },
+/**
+ * Icons are the one thing the registry cannot carry (it is shared with the
+ * backend and must stay free of React), so it names them and this map resolves
+ * the names. An unknown name falls back to a neutral glyph rather than a crash.
+ */
+const ICONS: Record<string, React.ReactNode> = {
+  PanelTop: <PanelTop className="w-4 h-4 text-indigo-500" />,
+  PanelBottom: <PanelBottom className="w-4 h-4 text-indigo-500" />,
+  ShoppingCart: <ShoppingCart className="w-4 h-4 text-orange-500" />,
+  Link: <LinkIcon className="w-4 h-4 text-emerald-500" />,
+  Clock: <Clock className="w-4 h-4 text-rose-500" />,
+  ShoppingBag: <ShoppingBag className="w-4 h-4 text-amber-500" />,
+  Video: <Video className="w-4 h-4 text-rose-500" />,
+  Layers: <Layers className="w-4 h-4 text-purple-500" />,
+  Image: <ImageIcon className="w-4 h-4 text-blue-500" />,
+  MessageSquare: <MessageSquare className="w-4 h-4 text-emerald-500" />,
+  Heading: <Heading className="w-4 h-4 text-slate-700" />,
+  Type: <Type className="w-4 h-4 text-slate-700" />,
+  Space: <Space className="w-4 h-4 text-slate-400" />,
+};
 
-  // Médias
-  {
-    type: 'video',
-    name: 'Lecteur Vidéo HD',
-    category: 'media',
-    description: 'Support YouTube, Vimeo ou fichier local compressé avec bouton "Activer le son" et lecture auto.',
-    icon: <Video className="w-4 h-4 text-rose-500" />,
-    badge: 'Ultra-Rapide'
-  },
-  {
-    type: 'slider',
-    name: 'Slider / Carrousel',
-    category: 'media',
-    description: 'Carrousel multi-cartes pour les témoignages, fonctionnalités ou galerie avant/après.',
-    icon: <Layers className="w-4 h-4 text-purple-500" />
-  },
-  {
-    type: 'image',
-    name: 'Image & Bannière',
-    category: 'media',
-    description: 'Image haute résolution avec contrôle de largeur, hauteur et espacement.',
-    icon: <ImageIcon className="w-4 h-4 text-blue-500" />
-  },
-  {
-    type: 'audio',
-    name: 'Message Vocal WhatsApp (Audio)',
-    category: 'engagement',
-    description: 'Bulle de message vocal WhatsApp avec onde sonore interactive, avatar et double coche bleue.',
-    icon: <MessageSquare className="w-4 h-4 text-emerald-500" />,
-    badge: '💬 WhatsApp'
-  },
+/**
+ * The registry's categories are finer than the four tabs this palette shows.
+ * Chrome and content both read as "structure" to a seller; commerce sits with
+ * conversion because that is what it is for.
+ */
+const PALETTE_CATEGORY: Record<string, ComponentItem['category']> = {
+  chrome: 'structure',
+  content: 'structure',
+  commerce: 'conversion',
+  conversion: 'conversion',
+  media: 'media',
+  engagement: 'engagement',
+};
 
-  // Structure & Typographie
-  {
-    type: 'hero',
-    name: 'Section Hero (Titre & Sous-titre)',
-    category: 'structure',
-    description: 'Grand titre percutant avec sous-titre explicatif et couleur de fond personnalisée.',
-    icon: <Heading className="w-4 h-4 text-slate-700" />
-  },
-  {
-    type: 'header',
-    name: 'En-tête de Marque',
-    category: 'structure',
-    description: 'Barre de marque supérieure avec logo ou texte.',
-    icon: <Type className="w-4 h-4 text-slate-700" />
-  },
-  {
-    type: 'text',
-    name: 'Texte & Paragraphe',
-    category: 'structure',
-    description: 'Bloc de texte personnalisable avec alignement horizontal et vertical.',
-    icon: <Type className="w-4 h-4 text-slate-700" />
-  },
-  {
-    type: 'spacer',
-    name: 'Séparateur d\'Espace',
-    category: 'structure',
-    description: 'Espacement vertical ajustable en pixels.',
-    icon: <Space className="w-4 h-4 text-slate-400" />
-  },
-
-  // Engagement
-  {
-    type: 'whatsapp',
-    name: 'Widget WhatsApp Flottant',
-    category: 'engagement',
-    description: 'Bouton de chat WhatsApp flottant avec message de bienvenue pré-rempli et badge de notification.',
-    icon: <MessageSquare className="w-4 h-4 text-emerald-500" />,
-    badge: 'Flottant'
-  }
-];
+/** The palette, read from the shared registry. Order is the registry's order. */
+export const COMPONENT_CATALOG: ComponentItem[] = catalogue().map((def) => ({
+  type: def.type as BlockType,
+  name: def.meta.label.fr,
+  category: PALETTE_CATEGORY[def.meta.category] ?? 'structure',
+  description: def.meta.description.fr,
+  icon: ICONS[def.meta.icon] ?? <Sparkles className="w-4 h-4 text-slate-400" />,
+  badge: def.meta.badge,
+}));
 
 export default function ComponentLibrary({ onAddBlock, onApplyTemplate }: ComponentLibraryProps) {
   const [activeTab, setActiveTab] = useState<'components' | 'templates'>('components');
@@ -292,8 +234,8 @@ export default function ComponentLibrary({ onAddBlock, onApplyTemplate }: Compon
                 <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px] text-slate-400 font-medium">
                   <span>{tmpl.blocks.length} composants inclus</span>
                   <button
-                    onClick={() => {
-                      if (window.confirm(`Appliquer le modèle "${tmpl.name}" ? Cela remplacera le layout actuel.`)) {
+                    onClick={async () => {
+                      if (await swal.warn({ title: `Appliquer le modèle "${tmpl.name}" ?`, text: 'Cela remplacera le layout actuel.', confirmText: 'Appliquer' })) {
                         onApplyTemplate(tmpl.blocks, tmpl.settings);
                         toast.success(`Modèle "${tmpl.name}" appliqué !`);
                       }

@@ -358,7 +358,54 @@ export const SECRET_REGISTRY: SecretDefinition[] = [
     label: 'OpenAI — Clé API',
     category: 'ai',
     secret: true,
-    description: 'Optionnelle — uniquement si des voix OpenAI sont activées dans le catalogue.',
+    description:
+      "Active le mode GPT du constructeur de boutique (OpenDesign Studio) : lecture des descriptions, rédaction des textes et génération des photos de la boutique. Aussi utilisée si des voix OpenAI sont activées dans le catalogue. Vide = le mode GPT n'apparaît pas dans le Studio.",
+  },
+  {
+    key: 'OPENAI_BUILDER_MODEL',
+    label: 'OpenAI — Modèle du constructeur',
+    category: 'ai',
+    secret: false,
+    description:
+      'gpt-5-mini par défaut. Le modèle GPT qui lit les descriptions des vendeurs et rédige les textes. Tout modèle chat compatible « Structured Outputs » (gpt-5, gpt-5-mini, gpt-4.1…).',
+  },
+  {
+    key: 'OPENAI_IMAGE_MODEL',
+    label: 'OpenAI — Modèle d’images',
+    category: 'ai',
+    secret: false,
+    description:
+      "gpt-image-1 par défaut. Génère les photos d'accroche, d'histoire et de promotion d'une boutique OpenDesign (3 images par génération). gpt-image-1 exige une organisation OpenAI vérifiée.",
+  },
+  {
+    key: 'IMAGE_ENGINE_ORDER',
+    label: 'Photos IA — Ordre des moteurs',
+    category: 'ai',
+    secret: false,
+    description:
+      "codex,openai,pollinations par défaut. Les moteurs essayés, dans l'ordre, pour dessiner les photos d'une boutique (OpenDesign et agent IA) : codex = Codex CLI sur l'abonnement ChatGPT du serveur (gratuit, ~2 min par photo), openai = API gpt-image (payante, ~20 s), pollinations = gratuit sans clé (qualité moindre, filigrane). Un moteur absent ou non configuré est sauté ; retirez-en un de la liste pour ne jamais l'utiliser.",
+  },
+  {
+    key: 'CODEX_CLI_PATH',
+    label: 'Codex CLI — Chemin du binaire',
+    category: 'ai',
+    secret: false,
+    description:
+      "Vide = détection automatique (npm global). Sous Windows ce doit être codex.exe (dans node_modules/@openai/codex-win32-x64/vendor/…/bin), jamais codex.cmd. Le serveur doit être connecté : lancez `codex login` avec le compte ChatGPT de la plateforme.",
+  },
+  {
+    key: 'CODEX_IMAGE_MODEL',
+    label: 'Codex CLI — Modèle pour les photos',
+    category: 'ai',
+    secret: false,
+    description: 'Vide = le modèle par défaut de la configuration Codex (~/.codex/config.toml). Sinon un identifiant passé à `codex exec -m`.',
+  },
+  {
+    key: 'OPENAI_IMAGE_QUALITY',
+    label: 'OpenAI — Qualité des images',
+    category: 'ai',
+    secret: false,
+    description: 'low, medium (défaut), high ou auto. Une image medium coûte environ 4 fois une image low et prend 10 à 30 s.',
   },
   {
     key: 'ELEVENLABS_API_KEY',

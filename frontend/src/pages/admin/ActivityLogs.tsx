@@ -22,6 +22,7 @@ import toast from 'react-hot-toast';
 import { adminApi } from '../../lib/api';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { swal } from '../../components/ui/SweetAlert';
 
 // ─── Helpers ────────────────────────────────────────────────
 const getActionColor = (action: string) => {
@@ -514,7 +515,7 @@ const ActivityLogs = () => {
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   const handleClearLogs = async () => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer TOUS les journaux d\'activité ? Cette action est irréversible.')) return;
+    if (!(await swal.danger({ title: 'Supprimer tous les journaux ?', text: "Tous les journaux d'activité seront effacés. Cette action est irréversible.", confirmText: 'Tout supprimer' }))) return;
     try {
       setLoading(true);
       await adminApi.clearActivityLogs();

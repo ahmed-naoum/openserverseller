@@ -22,7 +22,7 @@ import { prisma } from '../lib/prisma.js';
  * the seller's config no longer accepts a vision model. Photos are read by the
  * brain, inline, so the role never had a code path behind it.
  */
-export type ModelRole = 'BRAIN' | 'VISION' | 'STT' | 'TTS';
+export type ModelRole = 'BRAIN' | 'VISION' | 'STT' | 'TTS' | 'BUILDER';
 
 interface ModelSeed {
   provider: string;

@@ -21,7 +21,7 @@ import { prisma } from '../lib/prisma.js';
 import { getIO } from '../lib/realtime.js';
 import { createNotification } from '../utils/notification.js';
 import { getLockedLeadIds } from './leadCredits.service.js';
-import { LEAD_PRICE_CENTS, centsToLeads } from '../lib/sheetPricing.js';
+import { LEAD_PRICE_CENTS, centsToLeads, priceCentsFor } from '../lib/sheetPricing.js';
 import { claimPlanQuota, getActiveSubscriptionRow, getPlanRemaining } from './sheetPlans.service.js';
 import {
   appendRows,
@@ -386,9 +386,11 @@ async function releaseStaleClaims(): Promise<number> {
  */
 async function chargeCredits(
   vendorId: number,
-  leadIds: number[]
+  rows: Array<{ leadId: number; origin: string | null }>
 ): Promise<{ charged: number; balance: number }> {
-  if (!leadIds.length) return { charged: 0, balance: await getCreditBalance(vendorId) };
+  if (!rows.length) return { charged: 0, balance: await getCreditBalance(vendorId) };
+
+  const leadIds = rows.map((r) => r.leadId);
 
   // Anything already charged (a re-run after a partial failure) is filtered out
   // here so the decrement below matches the ledger rows exactly.
@@ -397,8 +399,23 @@ async function chargeCredits(
     select: { leadId: true },
   });
   const chargedSet = new Set(alreadyCharged.map((t) => t.leadId));
-  const toCharge = leadIds.filter((id) => !chargedSet.has(id));
-  if (!toCharge.length) return { charged: 0, balance: await getCreditBalance(vendorId) };
+  const pending = rows.filter((r) => !chargedSet.has(r.leadId));
+  if (!pending.length) return { charged: 0, balance: await getCreditBalance(vendorId) };
+
+  // The tariff is per row, not per batch: an abandoned cart is priced below a
+  // lead and priced again by how it was sent (lib/sheetPricing.ts). The source
+  // is read here rather than threaded through the queue because the queue holds
+  // job rows, and a lead's source is the lead's own property.
+  const sources = await prisma.lead.findMany({
+    where: { id: { in: pending.map((r) => r.leadId) } },
+    select: { id: true, source: true },
+  });
+  const sourceById = new Map(sources.map((l) => [l.id, l.source]));
+  const priced = pending.map((r) => ({
+    leadId: r.leadId,
+    cents: priceCentsFor(sourceById.get(r.leadId), r.origin),
+  }));
+  const toCharge = priced.map((p) => p.leadId);
 
   const subscription = await getActiveSubscriptionRow(vendorId);
 
@@ -407,6 +424,12 @@ async function chargeCredits(
     // same transaction, so it commits with the ledger rows it pays for or not at all.
     const fromPlan = subscription ? await claimPlanQuota(tx as any, subscription.id, toCharge.length) : 0;
     const fromBalance = toCharge.length - fromPlan;
+
+    // The pack covers the FIRST rows of the batch, so the cents tariff applies
+    // to whatever is left after it. Summed rather than multiplied: two rows in
+    // the same batch can now carry different prices.
+    const tariffed = priced.slice(fromPlan);
+    const totalCents = tariffed.reduce((sum, r) => sum + r.cents, 0);
 
     // A pack that covered the whole batch leaves the balance untouched — no write,
     // so `updatedAt` on the account does not move for a month of covered rows. The
@@ -417,9 +440,10 @@ async function chargeCredits(
         ? await tx.sheetCreditAccount.update({
             where: { userId: vendorId },
             data: {
-              // Cents, at the configured tariff — not one unit per lead.
-              balance: { decrement: fromBalance * LEAD_PRICE_CENTS },
-              totalConsumed: { increment: fromBalance * LEAD_PRICE_CENTS },
+              // Cents, at each row's own tariff — not one unit per lead, and no
+              // longer one price per batch.
+              balance: { decrement: totalCents },
+              totalConsumed: { increment: totalCents },
             },
           })
         : await tx.sheetCreditAccount.upsert({
@@ -435,7 +459,7 @@ async function chargeCredits(
     // `account.balance`: nothing left the balance for these rows, and stamping
     // them with the post-decrement figure would make the statement jump down to
     // the closing balance and then back up again on the tariffed rows underneath.
-    const balanceBefore = account.balance + fromBalance * LEAD_PRICE_CENTS;
+    const balanceBefore = account.balance + totalCents;
 
     for (let i = 0; i < fromPlan; i++) {
       await tx.sheetCreditTransaction.create({
@@ -453,16 +477,24 @@ async function chargeCredits(
     }
 
     // Descending so each row carries the balance as it stood after that charge,
-    // matching how WalletTransaction.balanceAfterMad is read.
-    for (let i = 0; i < fromBalance; i++) {
+    // matching how WalletTransaction.balanceAfterMad is read. With per-row
+    // prices the offset is the SUM of the rows still to come, not a count times
+    // a constant, so the last row lands exactly on the closing balance.
+    let remaining = totalCents;
+    for (let i = 0; i < tariffed.length; i++) {
+      const row = tariffed[i];
+      remaining -= row.cents;
       await tx.sheetCreditTransaction.create({
         data: {
           accountId: account.id,
           type: 'CONSUME',
-          amount: -LEAD_PRICE_CENTS,
-          balanceAfter: account.balance + (fromBalance - 1 - i) * LEAD_PRICE_CENTS,
-          leadId: toCharge[fromPlan + i],
-          description: `Lead #${toCharge[fromPlan + i]} envoyé vers Google Sheets`,
+          amount: -row.cents,
+          balanceAfter: account.balance + remaining,
+          leadId: row.leadId,
+          description:
+            row.cents === LEAD_PRICE_CENTS
+              ? `Lead #${row.leadId} envoyé vers Google Sheets`
+              : `Panier abandonné #${row.leadId} envoyé vers Google Sheets`,
         },
       });
     }
@@ -660,7 +692,9 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
   const claimedJobs = await prisma.sheetPushJob.findMany({
     where: { claimToken },
     orderBy: { id: 'asc' },
-    select: { id: true, leadId: true, attempts: true },
+    // `origin` rides along because the tariff depends on it: an abandoned cart
+    // streamed automatically is priced below one pushed by hand.
+    select: { id: true, leadId: true, attempts: true, origin: true },
   });
   stats.claimed = claimedJobs.length;
 
@@ -799,7 +833,10 @@ async function drainVendorLocked(vendorId: number, jobIds?: number[]): Promise<D
   stats.sent = live.length;
 
   try {
-    const { charged, balance: after } = await chargeCredits(vendorId, live.map((j) => j.leadId));
+    const { charged, balance: after } = await chargeCredits(
+      vendorId,
+      live.map((j) => ({ leadId: j.leadId, origin: j.origin })),
+    );
     if (charged > 0) emitBalance(vendorId, after);
   } catch (err) {
     // Deliberately swallowed: the rows exist, so under-charging is the correct

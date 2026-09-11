@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { swal } from '../../components/ui/SweetAlert';
 
 export default function AdminCampaigns() {
   const [campaigns, setCampaigns] = useState<InfluencerCampaign[]>([]);
@@ -68,7 +69,7 @@ export default function AdminCampaigns() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Voulez-vous vraiment supprimer cette campagne ?')) return;
+    if (!(await swal.danger({ title: 'Supprimer cette campagne ?', text: 'Cette action est irréversible.', confirmText: 'Supprimer' }))) return;
     try {
       await adminApi.deleteCampaign(id);
       toast.success('Campagne supprimée');

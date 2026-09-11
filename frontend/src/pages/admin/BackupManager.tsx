@@ -21,6 +21,7 @@ import { adminApi } from '../../lib/api';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import toast from 'react-hot-toast';
+import { swal } from '../../components/ui/SweetAlert';
 
 const BackupManager = () => {
   const [backups, setBackups] = useState<any[]>([]);
@@ -122,7 +123,7 @@ const BackupManager = () => {
   };
 
   const handleDeleteBackup = async (filename: string) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette sauvegarde ?')) return;
+    if (!(await swal.danger({ title: 'Supprimer cette sauvegarde ?', text: 'Le fichier sera définitivement effacé du serveur.', confirmText: 'Supprimer' }))) return;
     try {
       await adminApi.deleteBackup(filename);
       toast.success('Sauvegarde supprimée');
@@ -171,7 +172,7 @@ const BackupManager = () => {
   const filteredBackups = backups.filter(b => b.filename.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchAllUsers } from '../../lib/apiPaging';
+import { swal } from '../../components/ui/SweetAlert';
 
 export default function AdminAnnouncements() {
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -123,7 +124,7 @@ export default function AdminAnnouncements() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette annonce ?')) return;
+    if (!(await swal.danger({ title: 'Supprimer cette annonce ?', text: 'Cette action est irréversible.', confirmText: 'Supprimer' }))) return;
     try {
       await announcementApi.deleteAnnouncement(id);
       toast.success('Annonce supprimée');

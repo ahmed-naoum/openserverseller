@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, Copy, Check, RefreshCw, Trash2, Loader2 } fr
 import toast from 'react-hot-toast';
 import { domainApi, DomainDnsRecord, DomainState } from '../../lib/api';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { swal } from '../ui/SweetAlert';
 
 /**
  * The custom-domain tab of the Domains page.
@@ -294,8 +295,14 @@ export default function CustomDomainPanel() {
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => {
-                  if (window.confirm(tr('domain_disconnect_confirm', 'Déconnecter ce domaine ? Vos liens repasseront sur votre sous-domaine.'))) {
+                onClick={async () => {
+                  if (
+                    await swal.danger({
+                      title: tr('domain_btn_disconnect', 'Déconnecter le domaine'),
+                      text: tr('domain_disconnect_confirm', 'Déconnecter ce domaine ? Vos liens repasseront sur votre sous-domaine.'),
+                      confirmText: tr('domain_btn_disconnect', 'Déconnecter le domaine'),
+                    })
+                  ) {
                     disconnect.mutate();
                   }
                 }}
@@ -324,6 +331,15 @@ export default function CustomDomainPanel() {
 
               <RecordRow record={state.cnameRecord} tr={tr} />
 
+              {state.wwwCnameRecord && (
+                <div className="space-y-2 pt-2">
+                  <p className="text-xs font-semibold text-blue-900">
+                    {tr('domain_cname_www_opt', 'Ou si votre registrar exige un sous-domaine (ex : www) :')}
+                  </p>
+                  <RecordRow record={state.wwwCnameRecord} tr={tr} />
+                </div>
+              )}
+
               {/* The single most common failure at Moroccan registrars, so it is
                   called out here rather than left to a support ticket. */}
               <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-900">
@@ -332,7 +348,7 @@ export default function CustomDomainPanel() {
                   <strong>{tr('domain_apex_title', 'Votre registrar refuse un CNAME sur le domaine racine ?')}</strong>{' '}
                   {tr(
                     'domain_apex_desc',
-                    "C'est normal : la plupart ne l'autorisent pas. Deux solutions — basculer les serveurs de noms de votre domaine vers Cloudflare (gratuit), ou créer le CNAME sur « www » et rediriger le domaine racine vers « www »."
+                    "C'est normal : la plupart ne l'autorisent pas. Utilisez l'enregistrement « www » ci-dessus, puis ajoutez une redirection de votre domaine racine vers « www » dans le panneau de votre registrar."
                   )}
                 </span>
               </div>

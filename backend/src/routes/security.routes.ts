@@ -10,6 +10,7 @@ import {
   DynamicSecuritySettings,
   getBlockedIPsList,
   unblockIP,
+  clearAllRateLimitBlocks,
   logSecurityEvent
 } from '../middleware/security.js';
 import { banIp, unbanIp, normalizeBanValue, isValidBanValue } from '../lib/ipBan.js';
@@ -1135,6 +1136,18 @@ router.delete(
     const { ip } = req.body;
     if (!ip) return res.status(400).json({ status: 'error', message: 'IP required' });
 
+    if (ip === 'all' || ip === '*') {
+      blockedIPs.clear();
+      loginFailures.clear();
+      suspiciousRequests.clear();
+      clearAllRateLimitBlocks();
+      emitSecurityUpdate('blocklist');
+      return res.json({
+        status: 'success',
+        message: 'All temporary IP blocks and rate limits cleared successfully',
+      });
+    }
+
     const cleanIp = normalizeBanValue(ip);
     blockedIPs.delete(cleanIp);
     loginFailures.delete(cleanIp);
@@ -1160,6 +1173,23 @@ router.delete(
         ? `IP ${cleanIp} unblocked successfully`
         : `IP ${cleanIp} was not banned; cleared its rate-limit and threat counters`,
       removed,
+    });
+  })
+);
+
+router.post(
+  '/unblock-all',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    blockedIPs.clear();
+    loginFailures.clear();
+    suspiciousRequests.clear();
+    clearAllRateLimitBlocks();
+    emitSecurityUpdate('blocklist');
+    res.json({
+      status: 'success',
+      message: 'All temporary IP blocks and rate-limit blocks cleared successfully',
     });
   })
 );
@@ -1212,6 +1242,7 @@ router.put(
       globalRateLimitMax,
       uploadRateLimitMax,
       payoutRateLimitMax,
+      fraudIpThreshold,
       autoBanOrderThreshold,
       autoBanDurationHours,
     } = req.body;
@@ -1245,6 +1276,14 @@ router.put(
       globalRateLimitMax,
       uploadRateLimitMax,
       payoutRateLimitMax,
+      authenticatedRateLimitMax:
+        typeof req.body.authenticatedRateLimitMax === 'number' && req.body.authenticatedRateLimitMax > 0
+          ? Math.floor(req.body.authenticatedRateLimitMax)
+          : (current.authenticatedRateLimitMax || 2000),
+      fraudIpThreshold:
+        typeof fraudIpThreshold === 'number' && fraudIpThreshold >= 0
+          ? Math.floor(fraudIpThreshold)
+          : current.fraudIpThreshold,
       autoBanOrderThreshold:
         typeof autoBanOrderThreshold === 'number' && autoBanOrderThreshold >= 0
           ? Math.floor(autoBanOrderThreshold)

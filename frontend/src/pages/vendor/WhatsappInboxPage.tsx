@@ -36,6 +36,7 @@ import {
   type WaMessage,
 } from '../../lib/waAgentApi';
 import { useDebounce } from '../../hooks/utils';
+import { swal } from '../../components/ui/SweetAlert';
 
 /**
  * The live WhatsApp inbox.
@@ -636,12 +637,14 @@ export default function WhatsappInboxPage() {
 
   const handlePromote = async () => {
     if (!contact) return;
-    const confirmed = window.confirm(
-      'Créer un lead à partir de cette conversation ?\n\n' +
+    const confirmed = await swal.warn({
+      title: 'Créer un lead à partir de cette conversation ?',
+      text:
         "Attention : la création d'un lead est facturée, elle réserve un crédit Google Sheets " +
         'et le lead peut être transmis automatiquement au call center.\n\n' +
-        'Vérifiez la fiche client avant de continuer — elle ne sera plus modifiable ici.'
-    );
+        'Vérifiez la fiche client avant de continuer — elle ne sera plus modifiable ici.',
+      confirmText: 'Créer le lead',
+    });
     if (!confirmed) return;
 
     setPromoting(true);

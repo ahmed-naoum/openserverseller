@@ -103,6 +103,19 @@ export const productsBlock: BlockRenderer = {
     `font-family:inherit;font-size:12px;font-weight:900;text-align:center;cursor:pointer;` +
     `box-shadow:0 1px 3px 0 rgba(0,0,0,.1),0 1px 2px -1px rgba(0,0,0,.1);transition:transform .15s}` +
     `.bk-pr-b:active{transform:scale(.98)}` +
+    // Card styles. `flat` and `minimal` drop the box: the picture and the
+    // words sit on the page, the way a fashion or furniture catalogue does.
+    `.bk-pr-c.st-flat,.bk-pr-c.st-minimal{border:0;box-shadow:none;background:transparent!important}` +
+    `.bk-pr-c.st-flat:hover,.bk-pr-c.st-minimal:hover{transform:none;box-shadow:none}` +
+    `.bk-pr-c.st-flat .bk-pr-im,.bk-pr-c.st-minimal .bk-pr-im{border-radius:inherit}` +
+    `.bk-pr-c.st-flat .bk-pr-bd,.bk-pr-c.st-minimal .bk-pr-bd{padding:14px 2px 4px}` +
+    `.bk-pr-c.st-flat .bk-pr-ft,.bk-pr-c.st-minimal .bk-pr-ft{border-top:0;margin-top:8px;padding-top:0}` +
+    `.bk-pr-c.st-minimal .bk-pr-tx p{display:none}` +
+    `.bk-pr-im.fit-cover img{object-fit:cover;padding:0}` +
+    `.bk-pr-c.ta-c .bk-pr-tx{text-align:center}.bk-pr-c.ta-c .bk-pr-pr{justify-content:center}` +
+    `.bk-pr-b.bs-outline{background:transparent!important;border:2px solid currentColor;box-shadow:none}` +
+    `.bk-pr-b.bs-text{background:transparent!important;box-shadow:none;padding:4px 0;width:auto;` +
+    `text-decoration:underline;text-underline-offset:4px;letter-spacing:.04em}` +
     `.bk-pr-s{position:relative;width:100%}` +
     `.bk-pr-sv{overflow:hidden;width:100%;position:relative}` +
     `.bk-pr-st{display:flex;gap:16px;padding-top:8px;padding-bottom:8px}` +
@@ -187,6 +200,13 @@ export const productsBlock: BlockRenderer = {
       priceColor: safeColor(c.priceColor, '#f97316'),
       btnBg,
       btnColor,
+      cardStyle: oneOf(c.cardStyle, ['card', 'flat', 'minimal'] as const, 'card'),
+      imageHeight: num(c.imageHeight, 192, 80, 900),
+      imageFit: oneOf(c.imageFit, ['contain', 'cover'] as const, 'contain'),
+      buttonStyle: oneOf(c.buttonStyle, ['solid', 'outline', 'text'] as const, 'solid'),
+      buttonRadius: num(c.buttonRadius, 12, 0, 999),
+      buttonText: String(c.buttonText ?? '').trim().slice(0, 40),
+      titleAlign: oneOf(c.titleAlign, ['left', 'center'] as const, 'left'),
       slideStep: num(c.slideStep || 1, 1, 1, 20),
       autoPlay: c.autoPlay !== false,
       // The same field, two defaults: 3500ms per step for the carousel, 15s for
@@ -199,6 +219,23 @@ export const productsBlock: BlockRenderer = {
         'default'
       ),
       empty: EMPTY_TEXT,
+      // Products resolved at compile time by the store compiler (a bound
+      // `items`). The runtime draws them at once and never fetches. Trimmed to
+      // what a card reads, so a catalogue of 48 does not ship 48 descriptions
+      // of every column the API returns.
+      items: Array.isArray(c.items)
+        ? c.items.slice(0, 60).map((p: any) => ({
+            id: p?.id,
+            nameFr: p?.nameFr ?? null,
+            nameAr: p?.nameAr ?? null,
+            nameEn: p?.nameEn ?? null,
+            description: typeof p?.description === 'string' ? p.description.slice(0, 160) : null,
+            retailPriceMad: p?.retailPriceMad ?? null,
+            images: Array.isArray(p?.images) ? p.images.slice(0, 1).map((i: any) => ({ imageUrl: safeUrl(i?.imageUrl ?? i?.url) })) : [],
+            categories: Array.isArray(p?.categories) ? p.categories.slice(0, 1).map((k: any) => ({ nameFr: k?.nameFr ?? null })) : [],
+            href: typeof p?.href === 'string' && p.href.startsWith('/') ? p.href : null,
+          }))
+        : null,
       placeholder: PLACEHOLDER_SVG,
       chevronLeft: CHEVRON_LEFT,
       chevronRight: CHEVRON_RIGHT,
@@ -206,7 +243,7 @@ export const productsBlock: BlockRenderer = {
 
     // With no account selected React never fetches, so the empty state is the
     // final answer and the skeleton would be a lie.
-    const shell = accountIds.length
+    const shell = accountIds.length || Array.isArray(c.items)
       ? // cardsPerView starts at 3 before the resize effect runs, so a slider
         // shows three skeletons and a grid shows two rows of its columns.
         `<div class="bk-pr-g ${layout === 'slider' ? 'gs' : `g${cols}`}">` +

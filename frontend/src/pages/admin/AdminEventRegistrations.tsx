@@ -20,6 +20,7 @@ import { eventApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { swal } from '../../components/ui/SweetAlert';
 
 interface EventRegistrationItem {
   id: number;
@@ -98,7 +99,7 @@ export default function AdminEventRegistrations() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('هل أنت تأكد من رغبتك في حذف هذا التسجيل؟')) return;
+    if (!(await swal.danger({ title: 'حذف هذا التسجيل؟', text: 'لا يمكن التراجع عن هذا الإجراء.', confirmText: 'حذف', cancelText: 'إلغاء' }))) return;
     try {
       await eventApi.deleteAdminRegistration(id);
       setRegistrations(prev => prev.filter(r => r.id !== id));
@@ -166,7 +167,7 @@ export default function AdminEventRegistrations() {
   const stockCount = registrations.filter(r => r.stock === 'yes').length;
 
   return (
-    <div dir="rtl" className="space-y-6 pt-4 pb-12 animate-in fade-in duration-300">
+    <div dir="rtl" className="space-y-6 pb-12 animate-in fade-in duration-300">
       {/* Top Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-4">

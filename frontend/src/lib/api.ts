@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import toast from 'react-hot-toast';
+import { endSession, leaveIfSessionBound } from './session';
 
 export const API_URL = (import.meta.env as any).VITE_API_URL || (import.meta.env.PROD && typeof window !== 'undefined' ? `${window.location.origin}/api/v1` : 'http://localhost:3001/api/v1');
 export const BACKEND_URL = API_URL.replace('/api/v1', '');
@@ -121,6 +122,11 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
+      // Did THIS request go out signed? A 401 on an unauthenticated call — a
+      // public offer page, a storefront lookup — says nothing about anyone's
+      // session and must never sign a visitor out.
+      const wasAuthenticated = !!originalRequest.headers?.Authorization;
+
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
@@ -137,11 +143,22 @@ api.interceptors.response.use(
           }
           return api(originalRequest);
         }
-      } catch (refreshError) {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
+      } catch {
+        // Refresh itself was refused — fall through to the teardown below.
+      }
+
+      /**
+       * Nothing left to refresh with, so the session is genuinely over.
+       *
+       * This used to just reject: the page showed whatever error toast it had
+       * and the tab carried on rendering a dashboard the user had already
+       * signed out of in another tab — the "it still says I'm logged in but
+       * everything fails" state. Now the tab tears the session down and says
+       * why, and tells the other tabs to do the same.
+       */
+      if (wasAuthenticated) {
+        endSession('expired');
+        leaveIfSessionBound('expired');
       }
     }
 
@@ -195,6 +212,10 @@ export const authApi = {
     api.post('/auth/resend-otp', data),
   checkSubdomain: (name: string) =>
     api.get(`/auth/check-subdomain?name=${encodeURIComponent(name)}`),
+  // Unauthenticated twin of checkSubdomain, for the registration form — the
+  // store name is picked before the account (and therefore the token) exists.
+  checkStoreName: (name: string) =>
+    api.get(`/auth/store-name/available?name=${encodeURIComponent(name)}`),
   saveSubdomain: (subdomain: string) =>
     api.post('/auth/save-subdomain', { subdomain }),
   sendSubdomainOtp: (subdomain: string) =>
@@ -647,6 +668,10 @@ export const adminApi = {
   getCallCenterAgents: (params?: { startDate?: string; endDate?: string }) => api.get('/admin/call-center-agents', { params }),
   getCallCenterAgentLeads: (agentId: number, params?: { status?: string; search?: string; page?: number; limit?: number; startDate?: string; endDate?: string }) =>
     api.get('/admin/call-center-agents', { params: { agentId, ...params } }),
+  // Call Center Analytics — the inspector view and the agent-pages view of the
+  // same period computed side by side, plus the reconciliation between them.
+  getCallCenterAnalytics: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/admin/call-center-analytics', { params }),
   getFinanceUsers: () => api.get('/admin/finance/users'),
   adjustWallet: (data: { userId: number; amount: number; type: 'CREDIT' | 'DEBIT'; description?: string }) => 
     api.post('/admin/wallet/adjust', data),
@@ -722,6 +747,41 @@ export const fulfillmentApi = {
 };
 
 /** Vendor sub-accounts. VENDOR-only: a sub-account cannot reach any of these. */
+/**
+ * A seller's own abandoned checkouts.
+ *
+ * Deliberately NOT on `leadsApi`: those endpoints hang off `/leads` and are the
+ * call centre's queue, scoped to an agent's assigned sellers. These are scoped
+ * to the carts left on this seller's own pages.
+ */
+export const vendorCartsApi = {
+  list: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: 'all' | 'sent' | 'pending';
+    phoneQuality?: 'all' | 'complete' | 'incomplete';
+    dateField?: 'createdAt' | 'updatedAt';
+    dateFrom?: string;
+    dateTo?: string;
+    includeCompleted?: '1';
+  }) => api.get('/vendor/abandoned-carts', { params }),
+
+  setAutoCarts: (autoCarts: boolean) =>
+    api.patch('/vendor/abandoned-carts/settings', { autoCarts }),
+
+  remove: (id: string) => api.delete(`/vendor/abandoned-carts/${id}`),
+  removeMany: (ids: string[]) => api.post('/vendor/abandoned-carts/bulk-delete', { ids }),
+
+  sendToSheet: (id: string) => api.post(`/vendor/abandoned-carts/${id}/send-to-sheet`),
+  sendToSheetMany: (ids: string[]) =>
+    api.post('/vendor/abandoned-carts/bulk-send-to-sheet', { ids }),
+
+  sendToCallCenter: (id: string) => api.post(`/vendor/abandoned-carts/${id}/send-to-call-center`),
+  sendToCallCenterMany: (ids: string[]) =>
+    api.post('/vendor/abandoned-carts/bulk-send-to-call-center', { ids }),
+};
+
 export const vendorSubAccountsApi = {
   list: () => api.get('/vendor/sub-accounts'),
   /** The vendor's own catalogue — what the product picker offers. */
@@ -781,6 +841,15 @@ export const influencerApi = {
   pushLeadToCallCenter: (id: number) => api.post(`/influencer/leads/${id}/push-callcenter`),
   pushLeadsToCallCenterBulk: (leadIds: number[]) => api.post('/influencer/leads/push-callcenter/bulk', { leadIds }),
   deleteLead: (id: number) => api.delete(`/influencer/leads/${id}`),
+  /**
+   * Block / unblock the customer behind one of your own leads on YOUR pages
+   * only — a different list from the admin blocklist, which refuses the whole
+   * platform. Addressed by lead id on purpose: the address is never sent to the
+   * browser, so there is nothing here to pass one.
+   */
+  banLeadIp: (leadId: number, reason?: string) =>
+    api.post(`/influencer/leads/${leadId}/ip-ban`, reason ? { reason } : {}),
+  unbanLeadIp: (leadId: number) => api.delete(`/influencer/leads/${leadId}/ip-ban`),
   deleteLeadsBulk: (leadIds: number[]) => api.post('/influencer/leads/delete/bulk', { leadIds }),
   claimProduct: (data: { 
     productId: number; 
@@ -1032,6 +1101,7 @@ export interface DomainState {
   error: string | null;
   verifyRecord: DomainDnsRecord | null;
   cnameRecord: DomainDnsRecord | null;
+  wwwCnameRecord?: DomainDnsRecord | null;
   cnameTarget: string;
 }
 
@@ -1150,6 +1220,84 @@ export const eventApi = {
   getAdminRegistrations: () => api.get('/event/admin/registrations'),
   toggleAdminStatus: (enabled: boolean) => api.put('/event/admin/status', { enabled }),
   deleteAdminRegistration: (id: number) => api.delete(`/event/admin/registrations/${id}`),
+};
+
+export const storePublicApi = {
+  resolve: (slug?: string) =>
+    api.get('/public/store/resolve', {
+      params: {
+        ...(slug ? { slug } : {}),
+        host: typeof window !== 'undefined' ? window.location.host : undefined,
+      },
+    }),
+  getProducts: (params?: {
+    storeId?: number;
+    page?: number;
+    limit?: number;
+    collection?: string;
+    category?: string;
+    search?: string;
+    sort?: string;
+  }) => api.get('/public/store/products', { params }),
+  getCategories: (storeId?: number) =>
+    api.get('/public/store/categories', { params: storeId ? { storeId } : undefined }),
+  getProduct: (slug: string, storeId?: number) =>
+    api.get(`/public/store/products/${encodeURIComponent(slug)}`, { params: storeId ? { storeId } : undefined }),
+  getPage: (slug: string, storeId?: number) =>
+    api.get(`/public/store/pages/${encodeURIComponent(slug)}`, { params: storeId ? { storeId } : undefined }),
+  checkout: (data: {
+    storeId: number;
+    fullName: string;
+    phone: string;
+    city: string;
+    address: string;
+    notes?: string;
+    cartItems: Array<{
+      productId: number;
+      variantName?: string;
+      variantOptionId?: string;
+      quantity: number;
+    }>;
+    checkoutSessionId?: string;
+    fbp?: string;
+    fbc?: string;
+    capiEventId?: string;
+    eventSourceUrl?: string;
+  }) => api.post('/public/store/checkout', data),
+};
+
+export const vendorStoreApi = {
+  getMyStore: () => api.get('/store/my-store'),
+  updateMyStore: (data: any) => api.put('/store/my-store', data),
+  getCollections: () => api.get('/store/collections'),
+  createCollection: (data: any) => api.post('/store/collections', data),
+  updateCollection: (id: number, data: any) => api.put(`/store/collections/${id}`, data),
+  deleteCollection: (id: number) => api.delete(`/store/collections/${id}`),
+  getPages: () => api.get('/store/pages'),
+  createPage: (data: any) => api.post('/store/pages', data),
+  updatePage: (id: number, data: any) => api.put(`/store/pages/${id}`, data),
+  deletePage: (id: number) => api.delete(`/store/pages/${id}`),
+  updateProductVisibility: (data: { productId: number; showInStore?: boolean; sortOrder?: number }) =>
+    api.put('/store/products/visibility', data),
+
+  /* The shop catalogue. Nothing here touches the marketplace `Product` table
+     behind /dashboard/products and the referral links — a product created for
+     a shop is a shop product only, and cannot become a landing page. */
+  getCatalogue: (params?: { page?: number; limit?: number; search?: string; categoryId?: number }) =>
+    api.get('/store/catalogue', { params }),
+  adoptDefaults: (productIds?: number[]) =>
+    api.post('/store/catalogue/adopt-defaults', productIds ? { productIds } : {}),
+
+  getStoreProducts: (params?: { page?: number; limit?: number; search?: string; categoryId?: number }) =>
+    api.get('/store/products', { params }),
+  createStoreProduct: (data: any) => api.post('/store/products', data),
+  updateStoreProduct: (id: number, data: any) => api.put(`/store/products/${id}`, data),
+  deleteStoreProduct: (id: number) => api.delete(`/store/products/${id}`),
+
+  getStoreCategories: () => api.get('/store/categories'),
+  createStoreCategory: (data: any) => api.post('/store/categories', data),
+  updateStoreCategory: (id: number, data: any) => api.put(`/store/categories/${id}`, data),
+  deleteStoreCategory: (id: number) => api.delete(`/store/categories/${id}`),
 };
 
 

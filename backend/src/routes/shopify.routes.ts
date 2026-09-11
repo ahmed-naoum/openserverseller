@@ -68,7 +68,17 @@ router.post(
       const clientSecret = (getSecret('SHOPIFY_CLIENT_SECRET') || getSecret('SHOPIFY_API_SECRET') || '').trim();
 
       // Normalize shop domain (e.g. mystore.myshopify.com)
-      const cleanShop = shop.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const cleanShop = shop.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase().trim();
+
+      // SEC-06: Strict validation against SSRF - domain must strictly match *.myshopify.com
+      const shopifyDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$/;
+      if (!shopifyDomainRegex.test(cleanShop)) {
+        res.status(400).json({
+          success: false,
+          message: 'Domaine Shopify invalide. Le format attendu est votre-boutique.myshopify.com',
+        });
+        return;
+      }
 
       console.log(`[Shopify OAuth Token Exchange] Exchanging code for shop: ${cleanShop}`);
 

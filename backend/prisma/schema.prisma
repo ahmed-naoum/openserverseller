@@ -69,10 +69,15 @@ model User {
   subCanViewInvoices     Boolean @default(false)
   subCanViewIntegrations Boolean @default(false)
   subCanViewMarketplace  Boolean @default(false)
+  // Abandoned checkouts. Its own grant rather than riding on subCanViewLeads:
+  // a cart carries a customer's phone before that customer ever chose to order,
+  // so handing it over is a deliberate act, not a side effect of lead access.
+  subCanViewAbandonedCarts Boolean @default(false)
   subCanManageSupport    Boolean @default(false)
   subCanUseChat          Boolean @default(false)
   subCanManagePixels     Boolean @default(false)
   subCanManageDomains    Boolean @default(false)
+  subCanManageStore      Boolean @default(false)
 
   // Finer grants, each carved out of a broader one above because it is
   // destructive, costs money, or is visible to the customer.
@@ -239,6 +244,11 @@ model User {
   googleSheetOutTab           String?   @default("SILACOD Leads")
   googleSheetOutActive        Boolean   @default(true)
   googleSheetOutAuto          Boolean   @default(false)
+  // Auto-push for ABANDONED CARTS specifically, held separately from
+  // `googleSheetOutAuto` so a seller can stream real orders to their sheet
+  // without also streaming half-filled carts into it — and because the two are
+  // priced differently (lib/sheetPricing.ts).
+  googleSheetOutCartsAuto     Boolean   @default(false)
   googleSheetOutConnectedAt   DateTime?
   googleSheetOutLastError     String?
   googleSheetOutLastErrorAt   DateTime?
@@ -325,6 +335,7 @@ model User {
   agentInvoices         AgentInvoice[]       @relation("AgentInvoices")
   conversationLogs      ConversationLog[]    @relation("UserLogs")
   pixels                UserPixel[]
+  store                 Store?
 
   // WhatsApp AI agent
   whatsappAgent           WhatsappAgent?
@@ -449,6 +460,8 @@ model Product {
 
   isActive       Boolean  @default(true)
   showInHomepage Boolean  @default(false)
+  showInStore    Boolean  @default(true)
+  storeSortOrder Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -608,6 +621,12 @@ model Lead {
   ipAddress             String?
   ipCountry             String? // ISO-3166 alpha-2, from the CDN header or geoip-lite
   userAgent             String?
+  // Multi-item basket snapshot for store checkouts
+  cartItems             Json?
+  totalAmountMad        Float?
+  shippingFeeMad        Float            @default(0)
+  storeId               Int?
+  store                 Store?           @relation(fields: [storeId], references: [id], onDelete: SetNull)
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 
@@ -753,14 +772,26 @@ model OrderItem {
   id            Int     @id @default(autoincrement())
   orderId       Int
   order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId     Int
-  product       Product @relation(fields: [productId], references: [id])
+  /// Set for a marketplace product, null for a store-catalogue one.
+  /// Exactly one of productId / storeProductId is set on every row.
+  productId      Int?
+  product        Product?      @relation(fields: [productId], references: [id])
+  storeProductId Int?
+  storeProduct   StoreProduct? @relation(fields: [storeProductId], references: [id])
+
+  /// What was sold, captured at dispatch. Read by the screens that show a
+  /// line without caring which catalogue it came from, and the only record
+  /// left if the product is later deleted.
+  productName    String?
+  productSku     String?
+
   quantity      Int
   unitPriceMad  Float
   totalPriceMad Float
 
   @@index([orderId])
   @@index([productId])
+  @@index([storeProductId])
   @@map("order_items")
 }
 
@@ -1818,6 +1849,51 @@ model SecurityEvent {
 /// settings key is no longer read for blocking.
 ///
 /// Enforcement is middleware/security.ts `ipFilter`, matching via lib/ipBan.ts.
+/// A ban a SELLER raised on their own leads screen.
+///
+/// Deliberately a separate table from BannedIp rather than a nullable vendorId
+/// on it. Two reasons:
+///
+///   * Blast radius. A BannedIp row 403s the whole platform from ipFilter, on
+///     every request. One seller banning a Maroc Telecom NAT address would take
+///     that address away from every other seller's customers too. A row here
+///     only refuses checkout on the pages of the vendor who raised it.
+///   * Uniqueness. `BannedIp.value` is unique because there is exactly one
+///     global ban per address. Here the same address may be banned by any
+///     number of sellers independently, which is @@unique([vendorId, value]) —
+///     a shape a nullable column on one table cannot express (Postgres treats
+///     NULLs as distinct, so the global ban would stop being unique).
+model VendorIpBan {
+  id       Int @id @default(autoincrement())
+  /// The seller whose pages this ban covers. Denormalized like
+  /// BannedIp.bannedById: no relation, so removing an account cannot fail on it.
+  vendorId Int
+
+  /// Normalized exactly as BannedIp.value is, and matched by the same compiled
+  /// matcher in lib/ipBan.ts — an exact address or a CIDR range.
+  value String
+
+  reason String?
+  /// The order that prompted it, when raised from a lead row.
+  leadId Int?
+
+  /// Who clicked, kept readable after the account is renamed or removed. For a
+  /// sub-account this is the sub-account, not the parent vendor in `vendorId`.
+  createdById    Int?
+  createdByEmail String?
+
+  /// Written by the checkout guard, throttled — see lib/vendorIpBan.ts.
+  hitCount  Int       @default(0)
+  lastHitAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([vendorId, value])
+  @@index([vendorId])
+  @@map("vendor_ip_bans")
+}
+
 model BannedIp {
   id    Int    @id @default(autoincrement())
   /// An exact IPv4/IPv6 address, or a CIDR range ("105.66.0.0/16"). Stored
@@ -2930,4 +3006,292 @@ model WhatsappAgentLog {
   @@index([category, createdAt])
   @@index([contactId, createdAt])
   @@map("whatsapp_agent_logs")
+}
+
+// ==========================================
+// STORE SYSTEM MODELS
+// ==========================================
+
+model Store {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Store Identity & Branding
+  name            String
+  slug            String    @unique
+  tagline         String?
+  description     String?   @db.Text
+  logoUrl         String?
+  bannerUrl       String?
+  faviconUrl      String?
+
+  // Contact & Support
+  contactEmail    String?
+  contactPhone    String?
+  whatsappNumber  String?
+  instagramUrl    String?
+  facebookUrl     String?
+  tiktokUrl       String?
+
+  // Theme & Appearance Customization
+  themeName       String    @default("MODERN_MINIMAL")
+  primaryColor    String    @default("#f97316")
+  secondaryColor  String    @default("#1e293b")
+  fontFamily      String    @default("Inter")
+  headerStyle     String    @default("STICKY")
+  footerStyle     String    @default("STANDARD")
+  announcementText String?
+  announcementActive Boolean @default(true)
+  customCss       String?   @db.Text
+
+  // Home Page Builder Structure
+  homeStructure   Json?
+
+  // Navigation & Menus
+  navigationMenu  Json?
+  footerMenu      Json?
+
+  // SEO & Meta
+  metaTitle       String?
+  metaDescription String?
+  ogImageUrl      String?
+
+  // Operational Settings
+  currency        String    @default("MAD")
+  enableCod       Boolean   @default(true)
+  freeShippingThreshold Float?
+  standardShippingFee   Float   @default(0)
+  status          String    @default("ACTIVE")
+  isPublished     Boolean   @default(true)
+
+  // Relations
+  collections     StoreCollection[]
+  customPages     StorePage[]
+  leads           Lead[]
+  catalogue       StoreProduct[]
+  categories      StoreCategory[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([slug])
+  @@map("stores")
+}
+
+model StoreCollection {
+  id          Int       @id @default(autoincrement())
+  storeId     Int
+  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  nameFr      String
+  nameAr      String?
+  slug        String
+  description String?
+  imageUrl    String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+
+  products    StoreProduct[] @relation("StoreProductToCollection")
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([storeId, slug])
+  @@index([storeId])
+  @@map("store_collections")
+}
+
+model StorePage {
+  id              Int       @id @default(autoincrement())
+  storeId         Int
+  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  title           String
+  slug            String
+  contentHtml     String?   @db.Text
+  customStructure Json?
+  isPublished     Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([storeId, slug])
+  @@index([storeId])
+  @@map("store_pages")
+}
+
+// ==========================================
+// STUDIO: DRAFTS AND VERSIONS
+// ==========================================
+
+/// The unpublished working copy of one Studio target. One row per target;
+/// `targetKey` names the page ("link:123", "store:1", "store:1:page:9").
+/// Publishing copies it into the live column and deletes it. Nothing public
+/// ever reads this table.
+model StudioDraft {
+  id          Int      @id @default(autoincrement())
+  targetKind  String
+  targetKey   String
+  document    Json
+  updatedById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([targetKind, targetKey])
+  @@map("studio_drafts")
+}
+
+/// A published version, kept for history and restore. Written on every
+/// publish; a restore writes a new draft from it rather than editing it.
+model StudioVersion {
+  id          Int      @id @default(autoincrement())
+  targetKind  String
+  targetKey   String
+  document    Json
+  label       String?
+  /// publish | restore | agent
+  source      String   @default("publish")
+  createdById Int?
+  createdAt   DateTime @default(now())
+
+  @@index([targetKind, targetKey, createdAt])
+  @@map("studio_versions")
+}
+
+/// One run of the store agent: what the seller asked, what the model
+/// planned, what actually landed (in drafts, or live when publishing was
+/// allowed). Kept so a seller can read back what changed and an admin can
+/// see how the agent behaves across stores.
+model StoreAgentRun {
+  id          Int      @id @default(autoincrement())
+  storeId     Int
+  userId      Int
+  instruction String   @db.Text
+  provider    String
+  model       String?
+  status      String   @default("done")
+  summary     String?  @db.Text
+  actions     Json
+  durationMs  Int      @default(0)
+  inputTokens Int      @default(0)
+  outputTokens Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@map("store_agent_runs")
+}
+
+
+// ==========================================
+// STORE CATALOGUE
+//
+// A seller shop sells from these two tables and never from `Product`.
+// `Product` is the marketplace catalogue behind /dashboard/products and the
+// referral links at /r/<code>; the two are deliberately unrelated, so a
+// product created for a shop can never be turned into a landing page and a
+// marketplace product never appears in a shop.
+//
+// A row with `storeId = null` and `isDefault = true` belongs to the platform
+// starter catalogue, which every shop displays until its owner creates their
+// first product of their own. From that moment the shop shows only what its
+// owner made - see storeOwnsCatalogue() in services/store.service.ts.
+// ==========================================
+
+model StoreCategory {
+  id        Int     @id @default(autoincrement())
+  storeId   Int?
+  store     Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  isDefault Boolean @default(false)
+
+  /// Self-relation, so a category is a sub-category of another one. One level
+  /// is what the shop menu draws, but nothing here caps the depth.
+  parentId Int?
+  parent   StoreCategory?  @relation("StoreCategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children StoreCategory[] @relation("StoreCategoryTree")
+
+  nameFr      String
+  nameAr      String?
+  slug        String
+  description String?
+  imageUrl    String?
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  products StoreProduct[] @relation("StoreProductToStoreCategory")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, parentId])
+  @@index([storeId, slug])
+  @@index([isDefault])
+  @@map("store_categories")
+}
+
+model StoreProduct {
+  id        Int     @id @default(autoincrement())
+  storeId   Int?
+  store     Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  isDefault Boolean @default(false)
+
+  /// What the storefront URL carries. Unique per shop, enforced in the service
+  /// rather than by a constraint because the starter rows share storeId = null
+  /// and Postgres treats those nulls as distinct.
+  slug            String
+  sku             String?
+  nameFr          String
+  nameAr          String?
+  nameEn          String?
+  description     String?
+  longDescription String? @db.Text
+
+  priceMad          Float
+  /// Struck-through reference price. Null means no discount is shown.
+  compareAtPriceMad Float?
+  /// What the seller pays. Never sent to the storefront.
+  costMad           Float?
+
+  stockQuantity Int     @default(0)
+  stockStatus   String  @default("available")
+  trackStock    Boolean @default(true)
+
+  isActive    Boolean @default(true)
+  showInStore Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  metaTitle       String?
+  metaDescription String?
+
+  /// [{ minQuantity, pricePerUnitMad }], the pack pricing the storefront draws.
+  wholesalePacks Json?
+  /// [{ name, options: [{ id, label, priceDeltaMad }] }]
+  variants       Json?
+
+  categories  StoreCategory[]     @relation("StoreProductToStoreCategory")
+  collections StoreCollection[]   @relation("StoreProductToCollection")
+  images      StoreProductImage[]
+  orderItems  OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, showInStore])
+  @@index([storeId, sortOrder])
+  @@index([isDefault])
+  @@index([slug])
+  @@map("store_products")
+}
+
+model StoreProductImage {
+  id        Int          @id @default(autoincrement())
+  productId Int
+  product   StoreProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  isPrimary Boolean      @default(false)
+  sortOrder Int          @default(0)
+
+  @@index([productId])
+  @@map("store_product_images")
 }

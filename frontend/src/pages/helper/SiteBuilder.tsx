@@ -12,12 +12,15 @@ import {
   Type, Image as ImageIcon, Heading, LayoutTemplate, Link as LinkIcon, 
   ShoppingCart, ArrowUp, ArrowDown, Trash2, Save, ChevronLeft, Loader2,
   Clock, Space, Upload, ShieldCheck, ShieldAlert, Plus, ExternalLink, Code, Copy, Download, MessageSquare,
-  Layers, GripVertical, Undo2, Redo2, ShoppingBag, Music, Video, Sparkles
+  Layers, GripVertical, Undo2, Redo2, ShoppingBag, Music, Video, Sparkles,
+  PanelTop, PanelBottom
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildReferralUrl } from '../../utils/referral';
 import { currentBasePath } from '../../lib/dashboardBase';
 import { fetchAllUsers } from '../../lib/apiPaging';
+import { defaultsFor } from '@shared/blocks/index.js';
+import { flatBlocks } from '@shared/document/migrate.js';
 
 export default function SiteBuilder() {
   const { id } = useParams<{ id: string }>();
@@ -357,10 +360,12 @@ export default function SiteBuilder() {
 
       if (landingPage?.customStructure) {
         // Handle new structure { blocks: [], settings: {} } or legacy structure []
+        // Flat builders edit the flat list. A tree with real structure is
+        // flattened here on load; Studio is the editor for the structure itself.
         if (Array.isArray(landingPage.customStructure)) {
           setBlocks(landingPage.customStructure as EditorBlock[]);
-        } else if (landingPage.customStructure.blocks) {
-          setBlocks(landingPage.customStructure.blocks);
+        } else if (flatBlocks(landingPage.customStructure).length) {
+          setBlocks(flatBlocks(landingPage.customStructure) as EditorBlock[]);
           if (landingPage.customStructure.settings) {
             setPageSettings({
               backgroundColor: '#ffffff',
@@ -481,7 +486,14 @@ export default function SiteBuilder() {
       type,
       content: defaultContent
     };
-    setBlocks(prev => [...prev, newBlock]);
+    setBlocks(prev => {
+      // Page chrome lands where it belongs. Everything else appends, as before.
+      // A header dropped at the bottom of the page is not a header, and making
+      // the seller walk it up past twelve blocks with the arrow buttons is a
+      // chore the builder can simply not create.
+      if (type === 'site_header') return [newBlock, ...prev];
+      return [...prev, newBlock];
+    });
     setSelectedBlockId(newBlock.id);
   };
 
@@ -593,142 +605,10 @@ export default function SiteBuilder() {
     }
   };
 
-  const getDefaultContentForType = (type: BlockType) => {
-    switch (type) {
-      case 'header': return { text: 'Mon Entreprise', bgColor: '#ffffff', color: '#111827', paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 4 };
-      case 'hero': return { title: 'Offre Spéciale !', subtitle: 'Découvrez notre produit exclusif.', bgColor: '#f9fafb', titleColor: '#111827', subtitleColor: '#4b5563', paddingTop: 48, paddingBottom: 48, marginTop: 0, marginBottom: 24 };
-      case 'image': return { url: '', height: 500, paddingTop: 0, paddingBottom: 0, marginTop: 0, marginBottom: 0 };
-      case 'text': return { 
-        text: 'Nouveau paragraphe', 
-        isHeading: false, 
-        color: '#374151', 
-        align: 'left', 
-        verticalAlign: 'center',
-        paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 
-      };
-      case 'button': return { 
-        text: 'Commander Maintenant', 
-        bgColor: '#f97316', 
-        link: '', 
-        behavior: 'link',
-        stickyMobile: false,
-        stickyDesktop: false,
-        animationLayout: 'none',
-        animationTiming: 'ease-in-out',
-        paddingTop: 24, paddingBottom: 24, marginTop: 0, marginBottom: 0 
-      };
-      case 'countdown': return { text: "L'offre expire bientôt !", paddingTop: 24, paddingBottom: 24, marginTop: 0, marginBottom: 0 };
-      case 'whatsapp': return {
-        enableWidget: true,
-        phoneNumber: '',
-        headline: "Let's chat on WhatsApp",
-        nickname: 'Nitso',
-        welcomeMessage: 'How can I help you? 😊',
-        headerBg: '#25D366',
-        iconStyle: 'bubble',
-        hoverText: 'WhatsApp',
-        preSetMessage: '',
-        profileImage: '',
-        showOnDesktop: true,
-        showOnMobile: true,
-        openOnLoad: false,
-        useWhatsappWebOnDesktop: true
-      };
-      case 'spacer': return { height: 32 };
-      case 'slider': return {
-        slides: [
-          { title: 'Carte 1', description: 'Description de la première carte.', mediaUrl: '' },
-          { title: 'Carte 2', description: 'Description de la deuxième carte.', mediaUrl: '' }
-        ],
-        cardsPerView: 1,
-        cardGap: 16,
-        autoPlay: true,
-        autoPlaySpeed: 4000,
-        showArrows: true,
-        showDots: true,
-        mediaHeight: 280,
-        titleColor: '#111827',
-        descColor: '#6b7280',
-        cardBg: '#ffffff',
-        cardRadius: 20,
-        cardBorderWidth: 0,
-        cardBorderColor: '#e5e7eb',
-        cardShadow: 'md',
-        textAlign: 'left',
-        dotColor: '#f97316',
-        paddingTop: 24, paddingBottom: 24, marginTop: 0, marginBottom: 0
-      };
-      case 'products': return {
-        accountIds: [],
-        layoutType: 'grid',
-        selectedProducts: [],
-        gridCols: 3,
-        cardBg: '#ffffff',
-        cardRadius: 16,
-        cardShadow: 'md',
-        titleColor: '#111827',
-        descColor: '#4b5563',
-        priceColor: '#f97316',
-        btnBg: '#f97316',
-        btnColor: '#ffffff',
-        paddingTop: 32,
-        paddingBottom: 32,
-        marginTop: 0,
-        marginBottom: 0
-      };
-      case 'express_checkout': return { 
-        title: 'اطلب الآن', 
-        subtitle: 'املأ النموذج أدناه لحجز منتجك. الدفع عند الاستلام.',
-        buttonText: 'تأكيد الطلب',
-        themeColor: '#f97316',
-        formBgColor: '#ffffff',
-        containerBgColor: '#ffffff',
-        nameLabel: 'الاسم الكامل *',
-        namePlaceholder: 'مثال: يوسف بن جلون',
-        phoneLabel: 'رقم الهاتف *',
-        phonePlaceholder: '06 XX XX XX XX',
-        cityLabel: 'المدينة *',
-        cityPlaceholder: 'مثال: الدار البيضاء',
-        addressLabel: 'العنوان (اختياري)',
-        addressPlaceholder: 'عنوانك الكامل لترهين التوصيل...',
-        borderRadiusTL: 0,
-        borderRadiusTR: 0,
-        borderRadiusBL: 0,
-        borderRadiusBR: 0,
-        borderWidth: 0,
-        borderColor: '#f3f4f6',
-        priceColor: '#f97316',
-        priceSize: 30,
-        showPrice: true,
-        // { id, name, quantity, price, oldPrice, color, priceColor, priceSize, oldPriceColor, oldPriceSize }
-        // quantity is the number of units the pack ships, used only to decrement stock — price is
-        // already the bundle total, so quantity must never be multiplied into it.
-        options: [],
-        packColor: '#f64444', 
-        packBorderWidth: 2,
-        packBorderRadius: 16,
-        paddingTop: 32, paddingBottom: 32, paddingLeft: 16, paddingRight: 16, marginTop: 0, marginBottom: 0 
-      };
-      case 'audio': return {
-        audios: [
-          { id: '1', title: 'Audio 1', url: '' },
-          { id: '2', title: 'Audio 2', url: '' },
-          { id: '3', title: 'Audio 3', url: '' }
-        ],
-        controls: true,
-        autoplay: false,
-        loop: false,
-        bgColor: '#ffffff',
-        borderColor: '#f3f4f6',
-        paddingTop: 16,
-        paddingBottom: 16,
-        marginTop: 0,
-        marginBottom: 0
-      };
-      case 'video': return { url: '', redirectUrl: '', poster: '', width: 100, autoplay: false, loop: false, muted: false, controls: true, showFullscreenBtn: true, paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
-      default: return {};
-    }
-  };
+  // Defaults come from the shared block registry — the same object the V2
+  // builder, the validator and the compiler read. `addBlock` below still
+  // scopes a product grid to the owner's catalogue.
+  const getDefaultContentForType = (type: BlockType) => defaultsFor(type);
 
   const [isV2DemoOpen, setIsV2DemoOpen] = useState(false);
 
@@ -888,6 +768,22 @@ export default function SiteBuilder() {
         
         {/* Left Sidebar - Toolbar */}
         <div className="w-72 bg-white border-r border-gray-200 flex flex-col z-10 shrink-0">
+          {/* The page's own chrome.
+
+              These two are blocks, not something the storefront wraps around
+              the page. A landing page served on a seller's domain used to
+              borrow the React storefront's header and footer, which meant the
+              bar at the top arrived with the whole app bundle — on a page the
+              compiler had already turned into static HTML. As blocks they
+              compile with everything else and the seller edits them here. */}
+          <div className="p-4 border-b border-gray-100">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Structure de page</h3>
+            <div className="space-y-2">
+              <ToolButton fullWidth icon={<PanelTop className="w-4 h-4 text-indigo-500" />} label="En-tête du site" onClick={() => addBlock('site_header')} />
+              <ToolButton fullWidth icon={<PanelBottom className="w-4 h-4 text-indigo-500" />} label="Pied de page" onClick={() => addBlock('site_footer')} />
+            </div>
+          </div>
+
           <div className="p-4 border-b border-gray-100">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Composants</h3>
             <div className="space-y-2">
@@ -1023,6 +919,208 @@ export default function SiteBuilder() {
                     <Field label="Nom de la marque" type="text" value={activeBlock.content.text} onChange={(v: any) => updateBlockContent('text', v)} />
                     <Field label="Couleur de texte" type="color" value={activeBlock.content.color} onChange={(v: any) => updateBlockContent('color', v)} />
                     <SpacingControls content={activeBlock.content} onChange={updateBlockContent} />
+                  </div>
+                )}
+
+                {/* SITE HEADER */}
+                {activeBlock.type === 'site_header' && (
+                  <div className="space-y-4">
+                    <Field label="Nom de la marque" type="text" value={activeBlock.content.brandText} onChange={(v: any) => updateBlockContent('brandText', v)} />
+                    <Field label="URL du logo" type="text" value={activeBlock.content.logoUrl} onChange={(v: any) => updateBlockContent('logoUrl', v)} placeholder="/uploads/logo.png" />
+                    <Field label="Hauteur du logo (px)" type="number" value={activeBlock.content.logoHeight} onChange={(v: any) => updateBlockContent('logoHeight', v)} />
+
+                    <div className="pt-4 border-t border-gray-100 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Barre d&apos;annonce</span>
+                        <Field type="switch" value={activeBlock.content.announcementActive !== false} onChange={(v: any) => updateBlockContent('announcementActive', v)} />
+                      </div>
+                      {activeBlock.content.announcementActive !== false && (
+                        <>
+                          <Field label="Texte" type="text" value={activeBlock.content.announcementText} onChange={(v: any) => updateBlockContent('announcementText', v)} />
+                          <div className="grid grid-cols-2 gap-3">
+                            <Field label="Fond" type="color" value={activeBlock.content.announcementBg} onChange={(v: any) => updateBlockContent('announcementBg', v)} />
+                            <Field label="Texte" type="color" value={activeBlock.content.announcementColor} onChange={(v: any) => updateBlockContent('announcementColor', v)} />
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Menu ({(activeBlock.content.links || []).length}/8)</span>
+                        <button
+                          onClick={() => updateBlockContent('links', [...(activeBlock.content.links || []), { label: 'Nouveau lien', url: '/' }])}
+                          disabled={(activeBlock.content.links || []).length >= 8}
+                          className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-100 hover:bg-indigo-200 disabled:opacity-40 px-2 py-1 rounded-lg"
+                        >
+                          <Plus className="w-3 h-3" /> Ajouter
+                        </button>
+                      </div>
+                      {(activeBlock.content.links || []).map((link: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-gray-400">Lien #{idx + 1}</span>
+                            <button
+                              onClick={() => updateBlockContent('links', activeBlock.content.links.filter((_: any, i: number) => i !== idx))}
+                              className="p-1 text-gray-300 hover:text-rose-500"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <Field label="Libellé" type="text" value={link.label} onChange={(v: any) => {
+                            const next = [...activeBlock.content.links];
+                            next[idx] = { ...next[idx], label: v };
+                            updateBlockContent('links', next);
+                          }} />
+                          <Field label="Destination" type="text" value={link.url} onChange={(v: any) => {
+                            const next = [...activeBlock.content.links];
+                            next[idx] = { ...next[idx], url: v };
+                            updateBlockContent('links', next);
+                          }} placeholder="/products, #ancre ou https://..." />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Icone panier</span>
+                        <Field type="switch" value={activeBlock.content.showCart !== false} onChange={(v: any) => updateBlockContent('showCart', v)} />
+                      </div>
+                      {activeBlock.content.showCart !== false && (
+                        <Field label="Lien du panier" type="text" value={activeBlock.content.cartUrl} onChange={(v: any) => updateBlockContent('cartUrl', v)} />
+                      )}
+                      <Field label="Bouton d&apos;action (vide = masqué)" type="text" value={activeBlock.content.ctaText} onChange={(v: any) => updateBlockContent('ctaText', v)} />
+                      {(activeBlock.content.ctaText || '').trim() && (
+                        <>
+                          <Field label="Destination (vide = descend vers le formulaire)" type="text" value={activeBlock.content.ctaUrl} onChange={(v: any) => updateBlockContent('ctaUrl', v)} />
+                          <div className="grid grid-cols-2 gap-3">
+                            <Field label="Fond" type="color" value={activeBlock.content.ctaBg} onChange={(v: any) => updateBlockContent('ctaBg', v)} />
+                            <Field label="Texte" type="color" value={activeBlock.content.ctaColor} onChange={(v: any) => updateBlockContent('ctaColor', v)} />
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100 space-y-3">
+                      <div className="grid grid-cols-3 gap-2">
+                        <Field label="Fond" type="color" value={activeBlock.content.bgColor} onChange={(v: any) => updateBlockContent('bgColor', v)} />
+                        <Field label="Texte" type="color" value={activeBlock.content.textColor} onChange={(v: any) => updateBlockContent('textColor', v)} />
+                        <Field label="Bordure" type="color" value={activeBlock.content.borderColor} onChange={(v: any) => updateBlockContent('borderColor', v)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Rester visible au défilement</span>
+                        <Field type="switch" value={activeBlock.content.sticky !== false} onChange={(v: any) => updateBlockContent('sticky', v)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SITE FOOTER */}
+                {activeBlock.type === 'site_footer' && (
+                  <div className="space-y-4">
+                    <Field label="Nom de la marque" type="text" value={activeBlock.content.brandText} onChange={(v: any) => updateBlockContent('brandText', v)} />
+                    <Field label="URL du logo" type="text" value={activeBlock.content.logoUrl} onChange={(v: any) => updateBlockContent('logoUrl', v)} />
+                    <Field label="À propos" type="textarea" value={activeBlock.content.about} onChange={(v: any) => updateBlockContent('about', v)} />
+                    <Field label="Badges de confiance (séparés par des virgules)" type="text" value={(activeBlock.content.badges || []).join(', ')} onChange={(v: any) => updateBlockContent('badges', String(v).split(',').map((b: string) => b.trim()).filter(Boolean).slice(0, 4))} />
+
+                    <div className="pt-4 border-t border-gray-100 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Colonnes ({(activeBlock.content.columns || []).length}/4)</span>
+                        <button
+                          onClick={() => updateBlockContent('columns', [...(activeBlock.content.columns || []), { title: 'Nouvelle colonne', links: [{ label: 'Lien', url: '/' }] }])}
+                          disabled={(activeBlock.content.columns || []).length >= 4}
+                          className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-100 hover:bg-indigo-200 disabled:opacity-40 px-2 py-1 rounded-lg"
+                        >
+                          <Plus className="w-3 h-3" /> Ajouter
+                        </button>
+                      </div>
+
+                      {(activeBlock.content.columns || []).map((col: any, ci: number) => (
+                        <div key={ci} className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-gray-400">Colonne #{ci + 1}</span>
+                            <button
+                              onClick={() => updateBlockContent('columns', activeBlock.content.columns.filter((_: any, i: number) => i !== ci))}
+                              className="p-1 text-gray-300 hover:text-rose-500"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <Field label="Titre" type="text" value={col.title} onChange={(v: any) => {
+                            const next = [...activeBlock.content.columns];
+                            next[ci] = { ...next[ci], title: v };
+                            updateBlockContent('columns', next);
+                          }} />
+
+                          {(col.links || []).map((link: any, li: number) => (
+                            <div key={li} className="pl-3 border-l-2 border-gray-200 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-gray-300">Lien #{li + 1}</span>
+                                <button
+                                  onClick={() => {
+                                    const next = [...activeBlock.content.columns];
+                                    next[ci] = { ...next[ci], links: col.links.filter((_: any, i: number) => i !== li) };
+                                    updateBlockContent('columns', next);
+                                  }}
+                                  className="p-1 text-gray-300 hover:text-rose-500"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                              <Field label="Libellé" type="text" value={link.label} onChange={(v: any) => {
+                                const next = [...activeBlock.content.columns];
+                                const links = [...col.links];
+                                links[li] = { ...links[li], label: v };
+                                next[ci] = { ...next[ci], links };
+                                updateBlockContent('columns', next);
+                              }} />
+                              <Field label="Destination" type="text" value={link.url} onChange={(v: any) => {
+                                const next = [...activeBlock.content.columns];
+                                const links = [...col.links];
+                                links[li] = { ...links[li], url: v };
+                                next[ci] = { ...next[ci], links };
+                                updateBlockContent('columns', next);
+                              }} />
+                            </div>
+                          ))}
+
+                          <button
+                            onClick={() => {
+                              const next = [...activeBlock.content.columns];
+                              next[ci] = { ...next[ci], links: [...(col.links || []), { label: 'Nouveau lien', url: '/' }] };
+                              updateBlockContent('columns', next);
+                            }}
+                            disabled={(col.links || []).length >= 8}
+                            className="w-full text-[10px] font-bold text-gray-500 hover:text-indigo-600 disabled:opacity-40 py-1.5 border border-dashed border-gray-300 rounded-lg"
+                          >
+                            + Lien
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100 space-y-3">
+                      <span className="text-xs font-bold text-gray-500 uppercase">Réseaux sociaux</span>
+                      {['instagram', 'facebook', 'tiktok', 'whatsapp'].map((key) => (
+                        <Field
+                          key={key}
+                          label={key.charAt(0).toUpperCase() + key.slice(1)}
+                          type="text"
+                          value={(activeBlock.content.socials || {})[key]}
+                          onChange={(v: any) => updateBlockContent('socials', { ...(activeBlock.content.socials || {}), [key]: v })}
+                          placeholder="https://..."
+                        />
+                      ))}
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100 space-y-3">
+                      <Field label="Mentions légales" type="text" value={activeBlock.content.copyright} onChange={(v: any) => updateBlockContent('copyright', v)} />
+                      <Field label="Note (à droite)" type="text" value={activeBlock.content.note} onChange={(v: any) => updateBlockContent('note', v)} />
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Fond" type="color" value={activeBlock.content.bgColor} onChange={(v: any) => updateBlockContent('bgColor', v)} />
+                        <Field label="Titres" type="color" value={activeBlock.content.textColor} onChange={(v: any) => updateBlockContent('textColor', v)} />
+                      </div>
+                    </div>
                   </div>
                 )}
 

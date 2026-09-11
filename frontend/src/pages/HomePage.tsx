@@ -12,6 +12,7 @@ import {
 import LiveTicker from '../components/home/LiveTicker';
 import ProfitSimulator from '../components/home/ProfitSimulator';
 import SuccessStories from '../components/home/SuccessStories';
+import MobileAppDownload from '../components/home/MobileAppDownload';
 import FAQ from '../components/home/FAQ';
 import { publicApi, BACKEND_URL } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -210,15 +211,16 @@ export default function HomePage() {
             </div>
 
             {/* Center Navigation Links */}
-            <div className="hidden lg:flex items-center gap-4 xl:gap-6 text-[14px] xl:text-[15px] font-black text-[#2e315e] mx-auto z-10">
-              <Link to="/contact" className="hover:text-[#ff5722] transition-colors">{t('contact_us')}</Link>
+            <div className="hidden xl:flex items-center gap-3 text-[13px] whitespace-nowrap font-black text-[#2e315e] mx-3 z-10">
+              <Link to="/contact" className="hover:text-[#ff5722] transition-colors">{language === 'ar' ? 'تواصل معنا' : 'Contact'}</Link>
               <a href="#marketplace" className="hover:text-[#ff5722] transition-colors">{t('products_label')}</a>
+              <a href="#application" className="hover:text-[#ff5722] transition-colors">{language === 'ar' ? 'التطبيق' : language === 'en' ? 'The app' : 'L’application'}</a>
               <Link to="/influencer/register" className="hover:text-[#ff5722] transition-colors">{t('influencers_label')}</Link>
               <Link to="/register" className="hover:text-[#ff5722] transition-colors">{t('sellers_label')}</Link>
             </div>
 
             {/* Left side actions (Login, Register / Dashboard) */}
-            <div className="hidden lg:flex items-center gap-2.5 xl:gap-3 relative z-10">
+            <div className="hidden xl:flex items-center gap-2.5 xl:gap-3 relative z-10">
               <LanguageSwitcherWidget />
               {isAuthenticated ? (
                 <Link to={
@@ -263,7 +265,7 @@ export default function HomePage() {
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label={mobileMenuOpen ? t('close_menu', 'home', 'Close menu') : t('open_menu', 'home', 'Open menu')}
               aria-expanded={mobileMenuOpen}
-              className="lg:hidden p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors"
+              className="xl:hidden p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -278,7 +280,7 @@ export default function HomePage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
-              className="lg:hidden absolute top-[90px] left-0 right-0 bg-white border-b border-slate-100 shadow-2xl z-40 max-h-[calc(100vh-100px)] overflow-y-auto"
+              className="xl:hidden absolute top-[90px] left-0 right-0 bg-white border-b border-slate-100 shadow-2xl z-40 max-h-[calc(100vh-100px)] overflow-y-auto"
             >
               <div className="p-5 space-y-4 max-w-lg mx-auto">
                 {/* Language Switcher */}
@@ -318,6 +320,10 @@ export default function HomePage() {
                     }`}
                   >
                     <span>{t('products_label')}</span>
+                    <ChevronRight className={`w-4 h-4 text-slate-300 ${language === 'ar' ? 'rotate-180' : ''}`} />
+                  </a>
+                  <a href="#application" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-between px-4 py-3 rounded-xl font-bold text-[15px] text-[#2e315e] hover:bg-slate-50 active:bg-slate-100 transition-colors">
+                    <span>{language === 'ar' ? 'التطبيق' : language === 'en' ? 'The app' : 'L’application'}</span>
                     <ChevronRight className={`w-4 h-4 text-slate-300 ${language === 'ar' ? 'rotate-180' : ''}`} />
                   </a>
 
@@ -1018,6 +1024,8 @@ export default function HomePage() {
         </div>
       </section>
 
+      <MobileAppDownload />
+
       {/* ── SUCCESS STORIES ── */}
       <SuccessStories />
 
@@ -1094,6 +1102,7 @@ export default function HomePage() {
                 </a>
                 <Link to="/pricing" className="block hover:text-[#ff5722] transition-colors">{t('pricing_label')}</Link>
                 <a href="#success-stories" className="block hover:text-[#ff5722] transition-colors">{t('success_stories_label')}</a>
+                <a href="#application" className="block hover:text-[#ff5722] transition-colors">{language === 'ar' ? 'التطبيق' : language === 'en' ? 'The app' : 'L’application'}</a>
               </div>
             </div>
 

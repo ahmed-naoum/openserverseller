@@ -1,15 +1,25 @@
 import { esc, safeColor, safeUrl, num } from './escape.js';
 import { buildSrcset, sizesFor } from './blocks/image.js';
-import { buildCss } from './styles.js';
+import { buildCss, safeFont } from './styles.js';
 import { renderHead, renderNoscriptPixels, selectActivePixels, buildCsp, ActivePixel } from './head.js';
 import crypto from 'crypto';
 import { rendererFor, supportedTypes } from './blocks/index.js';
 import { probeImage, warmImageCache } from './media.js';
 import type { BlockContext } from './blocks/types.js';
+import type { PageDocument } from '../../shared/document/types.js';
+import { roundTrips } from '../../shared/document/migrate.js';
+import { renderTree, LAYOUT_CSS } from './layout.js';
 
 export interface RenderInput {
   code: string;
+  /** Every block in document order — for a tree, its flattened leaves. */
   blocks: any[];
+  /**
+   * The version 3 tree, when the page is stored as one. Only its structure is
+   * read here; the blocks above are what the renderers get. Absent for the
+   * flat pages every existing link is.
+   */
+  document?: PageDocument;
   settings: any;
   landingPage: any;
   product: any;
@@ -19,6 +29,16 @@ export interface RenderInput {
   influencerAvatar?: string | null;
   /** Host the page is served from, for canonical/OG URLs. Null when unknown. */
   origin: string | null;
+  /** Path of the canonical URL. Defaults to the landing page's /r/:code. */
+  canonicalPath?: string;
+  /** Open Graph image. Defaults to the product's primary image. */
+  ogImage?: string | null;
+  /**
+   * Wrap every block in a `data-od-node` marker so a dashboard preview can map
+   * a click back to the node it came from. `display:contents` keeps the wrapper
+   * out of layout. Never set for a served page.
+   */
+  inspect?: boolean;
 }
 
 function blockUrls(blocks: any[]): string[] {
@@ -47,14 +67,18 @@ function findLcpImage(blocks: any[]): { url: string; content: any } | null {
   return null;
 }
 
+/** The product's own name, in the same field order the page title falls through. */
+function productName(input: RenderInput): string {
+  const product = input.product;
+  return String(product?.nameFr || product?.nameAr || product?.nameEn || '').trim();
+}
+
 /** Falls back through the fields most likely to carry something meaningful. */
 function pageTitle(input: RenderInput): string {
   const explicit = String(input.landingPage?.title || '').trim();
   if (explicit) return explicit;
 
-  const product = input.product;
-  const name = String(product?.nameFr || product?.nameAr || product?.nameEn || '').trim();
-  return name || 'Commander';
+  return productName(input) || 'Commander';
 }
 
 function pageDescription(input: RenderInput): string {
@@ -250,6 +274,7 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
     pageMaxWidth,
     code: input.code,
     productPriceMad: Number.isFinite(retail) ? retail : null,
+    productName: productName(input) || null,
     pixels,
     landingButtonText: input.landingPage?.buttonText || null,
     firstCheckoutIndex: input.blocks.findIndex((b) => b?.type === 'express_checkout'),
@@ -259,16 +284,22 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
     protectVideos: Boolean(input.settings?.cloaking?.protectVideos),
   };
 
-  const body = input.blocks
-    .map((block, index) => {
-      // The widget is a fixed overlay resolved below from the block OR from page
-      // settings, and it contributes no layout, so it never renders in the flow.
-      if (block?.type === 'whatsapp') return '';
-      const renderer = rendererFor(block?.type);
-      if (!renderer) return '';
-      return renderer.render(block, { ...ctx, index });
-    })
-    .join('');
+  const renderBlock = (block: any, index: number): string => {
+    // The widget is a fixed overlay resolved below from the block OR from page
+    // settings, and it contributes no layout, so it never renders in the flow.
+    if (block?.type === 'whatsapp') return '';
+    const renderer = rendererFor(block?.type);
+    if (!renderer) return '';
+    const html = renderer.render(block, { ...ctx, index });
+    if (!input.inspect || !html) return html;
+    return `<div class="od-n" data-od-node="${esc(String(block?.id ?? ''))}" data-od-block="${esc(String(block?.type ?? ''))}" style="display:contents">${html}</div>`;
+  };
+
+  // A tree that is still flat underneath — the shape the migration produces —
+  // takes exactly the path a flat page takes, so it compiles to the same bytes.
+  // Only real structure earns the wrappers and their stylesheet.
+  const tree = input.document && !roundTrips(input.document) ? renderTree(input.document, renderBlock) : null;
+  const body = tree ? tree.html : input.blocks.map(renderBlock).join('');
 
   const waContent = whatsappContent(input);
   const waRenderer = rendererFor('whatsapp');
@@ -297,14 +328,19 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
     if (renderer?.css) sheets.add(renderer.css);
     if (renderer?.runtime) runtimes.add(renderer.runtime);
   }
+  if (tree) {
+    sheets.add(LAYOUT_CSS);
+    if (tree.css) sheets.add(tree.css);
+  }
 
   const settings = input.settings || {};
   const themeColor = safeColor(input.landingPage?.themeColor, '#f97316');
+  const fontFamily = safeFont(settings?.fontFamily);
 
   const css = buildCss(sheets, settings);
   const rtl = Boolean(settings?.rtl);
 
-  const canonical = input.origin ? `${input.origin}/r/${encodeURIComponent(input.code)}` : null;
+  const canonical = input.origin ? `${input.origin}${input.canonicalPath ?? `/r/${encodeURIComponent(input.code)}`}` : null;
 
   // The preload must advertise exactly the candidates the <img> will, or the
   // browser resolves the two independently and fetches two different files.
@@ -322,7 +358,8 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
     css,
     rtl,
     canonical,
-    ogImage: primaryProductImage(input.product),
+    ogImage: input.ogImage !== undefined ? input.ogImage : primaryProductImage(input.product),
+    fontFamily,
   });
 
   const noscript = renderNoscriptPixels(pixels);
@@ -353,5 +390,5 @@ export async function renderDocument(input: RenderInput): Promise<RenderedPage |
     crypto.createHash('sha256').update(src, 'utf8').digest('base64')
   );
 
-  return { html, csp: buildCsp(pixels, hashes) };
+  return { html, csp: buildCsp(pixels, hashes, { webFont: Boolean(fontFamily) }) };
 }

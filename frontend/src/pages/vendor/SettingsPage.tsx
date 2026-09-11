@@ -9,6 +9,7 @@ import {
   MonitorSmartphone, CreditCard, ChevronRight, Link2, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { swal } from '../../components/ui/SweetAlert';
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
@@ -459,8 +460,8 @@ export default function SettingsPage() {
                                 <input
                                     type="checkbox"
                                     checked={true}
-                                    onChange={() => {
-                                        if (confirm('Voulez-vous vraiment désactiver l\'authentification à deux facteurs ? Cela réduira la sécurité de votre compte.')) {
+                                    onChange={async () => {
+                                        if (await swal.warn({ title: 'Désactiver la 2FA ?', text: "Voulez-vous vraiment désactiver l'authentification à deux facteurs ? Cela réduira la sécurité de votre compte.", confirmText: 'Désactiver' })) {
                                             disable2FAMutation.mutate();
                                         }
                                     }}

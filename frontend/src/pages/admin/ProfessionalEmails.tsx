@@ -21,6 +21,7 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { swal } from '../../components/ui/SweetAlert';
 
 interface ProfessionalEmail {
   id: number;
@@ -111,7 +112,13 @@ export default function ProfessionalEmails() {
   };
 
   const handleDelete = async (usernameToDelete: string) => {
-    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer l'adresse email ${usernameToDelete}@silacod.com ? Cette action supprimera définitivement toutes les données de ce compte.`)) {
+    if (
+      !(await swal.danger({
+        title: `Supprimer ${usernameToDelete}@silacod.com ?`,
+        text: 'Toutes les données de ce compte seront définitivement supprimées.',
+        confirmText: 'Supprimer',
+      }))
+    ) {
       return;
     }
 
@@ -150,7 +157,7 @@ export default function ProfessionalEmails() {
   );
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

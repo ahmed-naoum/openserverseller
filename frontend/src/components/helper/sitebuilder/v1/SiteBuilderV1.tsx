@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import { buildReferralUrl } from '../../../../utils/referral';
 import { currentBasePath } from '../../../../lib/dashboardBase';
 import { fetchAllUsers } from '../../../../lib/apiPaging';
+import { flatBlocks } from '@shared/document/migrate.js';
 
 interface SiteBuilderV1Props {
   builderVersion?: 'v1' | 'v2';
@@ -201,10 +202,12 @@ export default function SiteBuilderV1({ builderVersion = 'v1', onSwitchVersion }
       const landingPage = res.data.status === 'success' ? res.data.data : res.data;
       
       if (landingPage?.customStructure) {
+        // Flat builders edit the flat list. A tree with real structure is
+        // flattened here on load; Studio is the editor for the structure itself.
         if (Array.isArray(landingPage.customStructure)) {
           setBlocks(landingPage.customStructure as EditorBlock[]);
-        } else if (landingPage.customStructure.blocks) {
-          setBlocks(landingPage.customStructure.blocks);
+        } else if (flatBlocks(landingPage.customStructure).length) {
+          setBlocks(flatBlocks(landingPage.customStructure) as EditorBlock[]);
           if (landingPage.customStructure.settings) {
             setPageSettings({
               backgroundColor: '#ffffff',

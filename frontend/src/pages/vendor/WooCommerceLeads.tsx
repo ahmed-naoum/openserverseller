@@ -289,7 +289,7 @@ export default function WooCommerceLeads() {
   const completedCount = orders.filter(o => o.status === 'completed').length;
 
   return (
-    <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-6 pt-4 pb-12 animate-in fade-in duration-300">
+    <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-6 pb-12 animate-in fade-in duration-300">
       {/* Page Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-4">

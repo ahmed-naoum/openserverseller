@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { BLOCK_TYPES } from '../shared/blocks/index.js';
+import { isDocument, validateDocument } from '../shared/document/index.js';
 
 /**
  * Shape checks for the landing-page save route.
@@ -16,22 +18,14 @@ import { z } from 'zod';
  * that reaches a <style> element in the current React renderer.
  */
 
-/** Every type BlockRenderer knows. Unknown types are rejected outright. */
-export const KNOWN_BLOCK_TYPES = [
-  'header',
-  'hero',
-  'image',
-  'text',
-  'button',
-  'express_checkout',
-  'spacer',
-  'countdown',
-  'whatsapp',
-  'slider',
-  'products',
-  'audio',
-  'video',
-] as const;
+/**
+ * Every type the platform knows. Unknown types are rejected outright.
+ *
+ * Read from the shared block registry rather than kept by hand here: this list
+ * used to be one of five places a block type had to be added, and the one most
+ * often forgotten — a block the builder could save but the validator refused.
+ */
+export const KNOWN_BLOCK_TYPES = BLOCK_TYPES;
 
 const MAX_BLOCKS = 200;
 const MAX_SERIALISED_BYTES = 512 * 1024;
@@ -65,6 +59,21 @@ const blockSchema = z.object({
 });
 
 /** Both shapes are in the wild: a bare array (legacy) and { blocks, settings }. */
+/**
+ * The version 3 tree. Its own validator does the work — ids, nesting, block
+ * schemas, limits — through the same code the editor and the agent go
+ * through, so a document the API accepts is exactly a document `applyOps`
+ * would have produced.
+ */
+const documentSchema = z
+  .object({
+    version: z.literal(3),
+    kind: z.string(),
+    settings: z.record(z.unknown()).optional(),
+    root: z.array(z.unknown()),
+  })
+  .passthrough();
+
 const structureSchema = z
   .union([
     z.array(blockSchema),
@@ -72,9 +81,19 @@ const structureSchema = z
       blocks: z.array(blockSchema),
       settings: z.record(z.unknown()).optional(),
     }).passthrough(),
+    documentSchema,
   ])
   .superRefine((value, ctx) => {
-    const blocks = Array.isArray(value) ? value : value.blocks;
+    if (isDocument(value)) {
+      for (const problem of validateDocument(value)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+      }
+      return;
+    }
+
+    // Past the document branch the value is one of the two flat shapes; the
+    // union type still carries the document member, so say so explicitly.
+    const blocks: z.infer<typeof blockSchema>[] = Array.isArray(value) ? value : ((value as any).blocks ?? []);
 
     if (blocks.length > MAX_BLOCKS) {
       ctx.addIssue({

@@ -28,8 +28,10 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildReferralUrl } from '../../utils/referral';
 import { containsBlockedWord } from '../../utils/blockedWords';
+import PageHeader from '../../components/common/PageHeader';
 import { currentBasePath } from '../../lib/dashboardBase';
 import { accountIdOf, canUseLinkBuilder } from '../../lib/subAccountPermissions';
+import { SweetAlertCard } from '../../components/ui/SweetAlert';
 
 type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'BUILDING';
 
@@ -330,36 +332,38 @@ export default function VendorInventory() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+      <PageHeader
+        icon={Package}
+        title={
+          <>
             {t('title', 'inventory', 'Mes Produits Réclamés')}
             {user?.mode === 'SELLER' && <span className="ml-2 text-emerald-600">(Vendeur)</span>}
             {user?.mode === 'AFFILIATE' && <span className="ml-2 text-indigo-600">(Affilié)</span>}
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">{t('subtitle', 'inventory', 'Gérez vos produits réclamés et suivez vos approbations.')}</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={fetchClaims}
-            className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-500 hover:text-influencer-600 hover:border-influencer-200 hover:bg-influencer-50 transition-all shadow-sm group"
-            title={t('refresh', 'inventory', 'Actualiser')}
-          >
-            <RefreshCw className="w-4 h-4 group-active:animate-spin" />
-          </button>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input 
-              type="text"
-              placeholder={t('search_placeholder', 'inventory', 'Rechercher un produit...')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-influencer-500 outline-none transition-all w-full md:w-64"
-            />
+          </>
+        }
+        subtitle={t('subtitle', 'inventory', 'Gérez vos produits réclamés et suivez vos approbations.')}
+        actions={
+          <div className="flex items-center gap-3">
+            <button
+              onClick={fetchClaims}
+              className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-500 hover:text-influencer-600 hover:border-influencer-200 hover:bg-influencer-50 transition-all shadow-sm group"
+              title={t('refresh', 'inventory', 'Actualiser')}
+            >
+              <RefreshCw className="w-4 h-4 group-active:animate-spin" />
+            </button>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder={t('search_placeholder', 'inventory', 'Rechercher un produit...')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-influencer-500 outline-none transition-all w-full md:w-64"
+              />
+            </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -854,52 +858,18 @@ export default function VendorInventory() {
         document.body
       )}
 
-      {/* Confirmation Modal */}
-      {confirmModal.isOpen && createPortal(
-        <div 
-          className="fixed inset-0 bg-slate-900/65 backdrop-blur-md flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-300 cursor-pointer"
-          onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-        >
-          <div 
-            className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200 cursor-default"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-8 text-center">
-              <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center bg-slate-50">
-                {confirmModal.icon}
-              </div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-3">
-                {confirmModal.title}
-              </h2>
-              <p className="text-sm text-slate-500 font-medium leading-relaxed mb-6">
-                {confirmModal.message}
-              </p>
-            </div>
-            <div className="p-8 bg-slate-50/50 flex gap-4">
-              <button
-                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                disabled={confirmModal.isLoading}
-                className="flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-white border border-slate-100 rounded-2xl transition-all disabled:opacity-50"
-              >
-                {t('btn_cancel', 'links', 'Annuler')}
-              </button>
-              <button
-                onClick={confirmModal.onConfirm}
-                disabled={confirmModal.isLoading}
-                className={`flex-1 px-6 py-4 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
-                  confirmModal.variant === 'danger' ? 'bg-red-500 hover:bg-red-600' : 'bg-slate-900 hover:bg-slate-800'
-                }`}
-              >
-                {confirmModal.isLoading && (
-                  <RefreshCw size={14} className="animate-spin" />
-                )}
-                {confirmModal.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <SweetAlertCard
+        open={confirmModal.isOpen}
+        type={confirmModal.variant === 'danger' ? 'danger' : 'question'}
+        icon={confirmModal.icon}
+        title={confirmModal.title}
+        text={confirmModal.message}
+        loading={!!confirmModal.isLoading}
+        cancelText={t('btn_cancel', 'links', 'Annuler')}
+        confirmText={confirmModal.confirmText}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+      />
 
       {/* Builder Link Selection Modal */}
       {isBuilderSelectOpen && createPortal(

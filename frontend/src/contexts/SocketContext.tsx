@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode } fro
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { useLocation } from 'react-router-dom';
+import { endSession, leaveIfSessionBound, type SessionEndReason } from '../lib/session';
 
 interface SocketContextType {
   socket: Socket | null;
@@ -56,6 +57,20 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     newSocket.on('disconnect', () => {
       console.log('🔴 Socket disconnected');
+    });
+
+    /**
+     * The server ended this account's session — the user signed out on another
+     * device, or something server-side revoked it.
+     *
+     * Routed through endSession() rather than handled inline so this device's
+     * OTHER tabs hear it too: only one tab per browser may hold a live socket,
+     * and a tab whose socket dropped still has to stop showing a dead session.
+     */
+    newSocket.on('auth:session-ended', (data: { reason?: SessionEndReason }) => {
+      const reason = data?.reason || 'revoked';
+      endSession(reason);
+      leaveIfSessionBound(reason);
     });
 
     newSocket.on('session:terminated', (data: { message?: string, blockedPath?: string }) => {

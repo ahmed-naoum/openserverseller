@@ -178,7 +178,7 @@ export default function ModBotDdos() {
               { key: 'globalRateLimitMax', label: 'Global Rate Limit (req/15min)' },
               { key: 'uploadRateLimitMax', label: 'Upload Rate Limit (req/15min)' },
               { key: 'payoutRateLimitMax', label: 'Payout Rate Limit (req/15min)' },
-              { key: 'autoBanOrderThreshold', label: 'Auto-ban after N orders / 24h (0 = off)' },
+              { key: 'fraudIpThreshold', label: 'Fraud: orders per IP / 24h → SUSPECT + ban (0 = off)' },
               { key: 'autoBanDurationHours', label: 'Auto-ban duration in hours (0 = forever)' },
             ].map(f => (
               <div key={f.key} className="space-y-1">

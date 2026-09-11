@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Silacod - Platform Architecture & API Specification</title>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;padding-bottom:50px}
+.header{background:linear-gradient(135deg,#1e293b,#334155);padding:28px 20px;text-align:center;border-bottom:1px solid #475569;position:relative}
+.header h1{font-size:26px;background:linear-gradient(90deg,#f97316,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900}
+.header p{color:#94a3b8;margin-top:6px;font-size:13px;font-weight:500}
+.tabs{display:flex;gap:8px;justify-content:center;padding:16px 20px;flex-wrap:wrap}
+.tab{padding:9px 18px;border-radius:10px;border:1px solid #475569;background:#1e293b;color:#94a3b8;cursor:pointer;transition:.2s;font-size:12px;font-weight:700}
+.tab:hover,.tab.active{background:#3b82f6;color:#fff;border-color:#3b82f6;box-shadow:0 4px 14px rgba(59,130,246,0.4)}
+.diagram-section{padding:16px 20px;max-width:1400px;margin:0 auto}
+.diagram-section.hidden{display:none !important}
+.diagram-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.diagram-section h2{font-size:18px;color:#f1f5f9;padding-left:10px;border-left:4px solid #3b82f6;font-weight:800}
+
+.zoom-controls{display:flex;gap:6px;background:#1e293b;padding:5px;border-radius:10px;border:1px solid #475569}
+.zoom-btn{background:#334155;color:#f8fafc;border:1px solid #475569;padding:5px 12px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:bold;transition:.15s}
+.zoom-btn:hover{background:#3b82f6;border-color:#3b82f6}
+
+.mermaid-wrapper{background:#1e293b;border-radius:16px;padding:16px;border:1px solid #334155;overflow:hidden;height:680px;position:relative;display:flex;align-items:center;justify-content:center}
+.mermaid-wrapper svg{width:100% !important;height:100% !important;max-width:none !important;cursor:grab;display:block}
+.mermaid-wrapper svg:active{cursor:grabbing}
+.mermaid{width:100%;height:100%}
+
+.legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;padding:10px 20px;background:#1e293b;border-radius:12px;margin:0 20px 16px;border:1px solid #334155}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.legend-dot{width:10px;height:10px;border-radius:3px}
+
+/* Node Hover & Interactive Cursor */
+.mermaid .node {
+  cursor: pointer !important;
+  transition: all 0.2s ease-in-out;
+}
+.mermaid .node:hover {
+  filter: drop-shadow(0 0 16px rgba(59, 130, 246, 0.95)) !important;
+}
+
+/* API Badge & Pulse Dot */
+.api-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(16, 185, 129, 0.25);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  border-radius: 9999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 800;
+  margin-left: 6px;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+}
+.api-dot-pulse {
+  width: 6px;
+  height: 6px;
+  background-color: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #10b981;
+  animation: pulse-glow 1.5s infinite alternate;
+}
+@keyframes pulse-glow {
+  from { transform: scale(0.9); opacity: 0.7; }
+  to { transform: scale(1.3); opacity: 1; box-shadow: 0 0 10px #10b981; }
+}
+
+/* Modal Backdrop & Card */
+.api-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-in-out;
+}
+.api-modal-backdrop.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.api-modal-card {
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 850px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85);
+  overflow: hidden;
+  transform: scale(0.95);
+  transition: transform 0.2s ease-in-out;
+}
+.api-modal-backdrop.active .api-modal-card {
+  transform: scale(1);
+}
+.modal-header {
+  padding: 18px 24px;
+  background: #0f172a;
+  border-bottom: 1px solid #334155;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-title-group h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.modal-route {
+  font-family: monospace;
+  font-size: 12px;
+  color: #38bdf8;
+  margin-top: 4px;
+  background: #1e293b;
+  padding: 3px 10px;
+  border-radius: 6px;
+  display: inline-block;
+  border: 1px solid #334155;
+  font-weight: bold;
+}
+.modal-close-btn {
+  background: #334155;
+  border: none;
+  color: #94a3b8;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  transition: .15s;
+}
+.modal-close-btn:hover {
+  background: #ef4444;
+  color: #fff;
+}
+.modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.req-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.req-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.req-url {
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 13px;
+  color: #f1f5f9;
+  word-break: break-all;
+}
+.method-badge {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.method-get { background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+.method-post { background: rgba(59, 130, 246, 0.18); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.35); }
+.method-put { background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); }
+.method-delete { background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); }
+
+.req-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.code-box-title {
+  font-size: 11px;
+  font-weight: bold;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-top: 10px;
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.copy-btn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.copy-btn:hover { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+pre.code-block {
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 11px;
+  color: #38bdf8;
+  overflow-x: auto;
+  max-height: 160px;
+}
+.role-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Silacod Platform Architecture & API Spec</h1>
+  <p>Interactive Route Navigator • Click any node to inspect HTTP Method, API Endpoint, Payload & Response Schemas</p>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('public')">Public & Auth</div>
+  <div class="tab" onclick="showTab('cloaking')">Cloaking Flow</div>
+  <div class="tab" onclick="showTab('vendor')">Vendor Portal</div>
+  <div class="tab" onclick="showTab('influencer')">Influencer Portal</div>
+  <div class="tab" onclick="showTab('grosseller')">Grosseller Portal</div>
+  <div class="tab" onclick="showTab('agent')">Agent Portal</div>
+  <div class="tab" onclick="showTab('helper')">Helper Portal</div>
+  <div class="tab" onclick="showTab('admin')">Admin Portal</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#FF5722"></div>Home</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#2E315E"></div>Public</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8B5CF6"></div>Auth</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#EF4444"></div>Cloaking</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3B82F6"></div>Vendor</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#EC4899"></div>Influencer</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#F59E0B"></div>Grosseller</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8B5CF6"></div>Agent</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#14B8A6"></div>Helper</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#1E293B;border:1px solid #475569"></div>Admin</div>
+</div>
+
+<!-- PUBLIC & AUTH -->
+<div id="tab-public" class="diagram-section">
+  <div class="diagram-header">
+    <h2>1. Public Pages & Authentication Flow</h2>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn('tab-public')">🔍 +</button>
+      <button class="zoom-btn" onclick="zoomOut('tab-public')">🔍 -</button>
+      <button class="zoom-btn" onclick="resetZoom('tab-public')">🎯 Fit & Center</button>
+    </div>
+  </div>
+  <div class="mermaid-wrapper">
+    <pre class="mermaid">
+flowchart TD
+    Home["Home Page <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    Contact["Contact Page <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    MarketSection["Marketplace Section <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    InfRegister["Influencer Register <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    Login["Login Page <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    Register["Register Page <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    About["About Page"]
+    Careers["Careers Page"]
+    Blog["Blog Page"]
+    FAQ["FAQ Page"]
+    Pricing["Pricing Page"]
+    Terms["Terms Page"]
+    Privacy["Privacy Page"]
+    Event["Masterclass Page <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    PublicMarket["Public Marketplace <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ProductDetail["Product Detail Page <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ForgotPass["Forgot Password <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ResetPass["Reset Password <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    CompleteGoogle["Google SSO Register <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VerifyEmail["Email Verification <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    PendingVerify["Pending Verification"]
+    AccountVerify["ID Verification <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    Home -->|Navbar| Contact
+    Home -->|Navbar| MarketSection
+    Home -->|Navbar| InfRegister
+    Home -->|Navbar| Login
+    Home -->|Navbar| Register
+    Home -->|Footer| About
+    Home -->|Footer| Careers
+    Home -->|Footer| Blog
+    Home -->|Footer| FAQ
+    Home -->|Footer| Pricing
+    Home -->|Footer| Terms
+    Home -->|Footer| Privacy
+    Home -->|Footer| Event
+
+    MarketSection --> PublicMarket
+    PublicMarket -->|View| ProductDetail
+    ProductDetail -->|Buy| Register
+
+    Login -->|Forgot| ForgotPass
+    ForgotPass --> ResetPass
+    Register -->|Google| CompleteGoogle
+    Register -->|Email| VerifyEmail
+    VerifyEmail --> PendingVerify
+    PendingVerify --> AccountVerify
+
+    style Home fill:#FF5722,stroke:#E64A19,color:#fff
+    style Contact fill:#2E315E,stroke:#1E2142,color:#fff
+    style MarketSection fill:#2E315E,stroke:#1E2142,color:#fff
+    style About fill:#2E315E,stroke:#1E2142,color:#fff
+    style Careers fill:#2E315E,stroke:#1E2142,color:#fff
+    style Blog fill:#2E315E,stroke:#1E2142,color:#fff
+    style FAQ fill:#2E315E,stroke:#1E2142,color:#fff
+    style Pricing fill:#2E315E,stroke:#1E2142,color:#fff
+    style Terms fill:#2E315E,stroke:#1E2142,color:#fff
+    style Privacy fill:#2E315E,stroke:#1E2142,color:#fff
+    style Event fill:#2E315E,stroke:#1E2142,color:#fff
+    style PublicMarket fill:#2E315E,stroke:#1E2142,color:#fff
+    style ProductDetail fill:#2E315E,stroke:#1E2142,color:#fff
+    style InfRegister fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style Login fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style Register fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style ForgotPass fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style ResetPass fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style CompleteGoogle fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style VerifyEmail fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style PendingVerify fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style AccountVerify fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    </pre>
+  </div>
+</div>
+
+<!-- CLOAKING -->
+<div id="tab-cloaking" class="diagram-section">
+  <div class="diagram-header">
+    <h2>2. Traffic Cloaking & Redirection</h2>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn('tab-cloaking')">🔍 +</button>
+      <button class="zoom-btn" onclick="zoomOut('tab-cloaking')">🔍 -</button>
+      <button class="zoom-btn" onclick="resetZoom('tab-cloaking')">🎯 Fit & Center</button>
+    </div>
+  </div>
+  <div class="mermaid-wrapper">
+    <pre class="mermaid">
+flowchart TD
+    Visitor["Visitor Referral Link <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    Evaluator{"Cloaking Evaluator <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"}
+    BlockUA["Redirect VPN URL"]
+    BlockDNS["Redirect DNS URL"]
+    BlockIPv6["Redirect IPv6 URL"]
+    BlockCountry["Redirect Country URL"]
+    BlockVPN["Redirect VPN URL"]
+    RenderLanding["Render Landing Page <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ThankYou["Thank You Page"]
+
+    Visitor --> Evaluator
+    Evaluator -->|UA Blocked| BlockUA
+    Evaluator -->|DNS Blocked| BlockDNS
+    Evaluator -->|IPv6| BlockIPv6
+    Evaluator -->|Country Blocked| BlockCountry
+    Evaluator -->|VPN Detected| BlockVPN
+    Evaluator -->|All Passed| RenderLanding
+    RenderLanding -->|Submit Order| ThankYou
+
+    style Visitor fill:#FF5722,stroke:#E64A19,color:#fff
+    style Evaluator fill:#F59E0B,stroke:#D97706,color:#fff
+    style BlockUA fill:#EF4444,stroke:#DC2626,color:#fff
+    style BlockDNS fill:#EF4444,stroke:#DC2626,color:#fff
+    style BlockIPv6 fill:#EF4444,stroke:#DC2626,color:#fff
+    style BlockCountry fill:#EF4444,stroke:#DC2626,color:#fff
+    style BlockVPN fill:#EF4444,stroke:#DC2626,color:#fff
+    style RenderLanding fill:#10B981,stroke:#059669,color:#fff
+    style ThankYou fill:#10B981,stroke:#059669,color:#fff
+    </pre>
+  </div>
+</div>
+
+<!-- VENDOR -->
+<div id="tab-vendor" class="diagram-section">
+  <div class="diagram-header">
+    <h2>3. Vendor Dashboard</h2>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn('tab-vendor')">🔍 +</button>
+      <button class="zoom-btn" onclick="zoomOut('tab-vendor')">🔍 -</button>
+      <button class="zoom-btn" onclick="resetZoom('tab-vendor')">🎯 Fit & Center</button>
+    </div>
+  </div>
+  <div class="mermaid-wrapper">
+    <pre class="mermaid">
+flowchart TD
+    VD["Vendor Overview <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V1["Vendor Products <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V2["Vendor Leads <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    V2 --> V2a["New Manual Lead <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V3["E-Commerce Integrations <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    V3 --> V3a["YouCan Leads Sync <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    V3 --> V3b["Shopify Leads Sync <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    V3 --> V3c["WooCommerce Sync <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    V3 --> V3d["Google Sheets Sync <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V4["Vendor Inventory <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V5["Custom Domains <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V6["Vendor Wallet <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V7["Vendor Invoices <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V8["Vendor Marketplace <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V9["Campaign Links <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    V9 --> V9a["SiteBuilder Editor <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V10["Meta Pixel <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V10b["Google Pixel <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V10c["TikTok Pixel <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V10d["Snapchat Pixel <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V11["Vendor Support <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V12["Vendor Live Chat <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    VD --> V13["Vendor Settings <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    style VD fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V1 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V2 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V2a fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V3 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V3a fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V3b fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V3c fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V3d fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V4 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V5 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V6 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V7 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V8 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V9 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V9a fill:#60A5FA,stroke:#3B82F6,color:#fff
+    style V10 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V10b fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V10c fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V10d fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V11 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V12 fill:#3B82F6,stroke:#2563EB,color:#fff
+    style V13 fill:#3B82F6,stroke:#2563EB,color:#fff
+    </pre>
+  </div>
+</div>
+
+<!-- INFLUENCER -->
+<div id="tab-influencer" class="diagram-section">
+  <div class="diagram-header">
+    <h2>4. Influencer Dashboard</h2>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn('tab-influencer')">🔍 +</button>
+      <button class="zoom-btn" onclick="zoomOut('tab-influencer')">🔍 -</button>
+      <button class="zoom-btn" onclick="resetZoom('tab-influencer')">🎯 Fit & Center</button>
+    </div>
+  </div>
+  <div class="mermaid-wrapper">
+    <pre class="mermaid">
+flowchart TD
+    ID["Influencer Overview <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I1["Influencer Profile <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I2["Influencer Campaigns <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I3["Influencer Leads <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I4["Influencer Inventory <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I5["Referral Links <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    I5 --> I5a["SiteBuilder Editor <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I6["Influencer Marketplace <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I7["Influencer Wallet <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I8["Influencer Invoices <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I9["Influencer Support <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I10["Influencer Chat <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ID --> I11["Influencer Settings <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    style ID fill:#EC4899,stroke:#DB2777,color:#fff
+    style I1 fill:#EC4899,stroke:#DB2777,color:#fff
+    style I2 fill:#EC4899,stroke:#DB2777,color:#fff
+    style I3 fill:#EC4899,stroke:#DB2777,color:#fff
+    style I4 fill:#EC4899,stroke:#DB2777,color:#fff
+    style I5 fill:#EC4899,stroke:#DB2777,color:#fff
+    style I5a fill:#F472B6,stroke:#EC4899,color:#fff
+    style I6 fill:#EC4899,stroke:#DB2777,color:#fff
+    style I7 fill:#EC4899,stroke:#DB2777,color:#fff
+    style I8 fill:#EC4899,stroke:#DB2777,color:#fff
+    style I9 fill:#EC4899,stroke:#DB2777,color:#fff
+    style I10 fill:#EC4899,stroke:#DB2777,color:#fff
+    style I11 fill:#EC4899,stroke:#DB2777,color:#fff
+    </pre>
+  </div>
+</div>
+
+<!-- GROSSELLER -->
+<div id="tab-grosseller" class="diagram-section">
+  <div class="diagram-header">
+    <h2>5. Grosseller Dashboard</h2>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn('tab-grosseller')">🔍 +</button>
+      <button class="zoom-btn" onclick="zoomOut('tab-grosseller')">🔍 -</button>
+      <button class="zoom-btn" onclick="resetZoom('tab-grosseller')">🎯 Fit & Center</button>
+    </div>
+  </div>
+  <div class="mermaid-wrapper">
+    <pre class="mermaid">
+flowchart TD
+    GD["Grosseller Overview <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G1["Grosseller Profile <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G2["Purchased Inventory <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G3["Add Wholesale Product <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G4["Grosseller Selling <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G5["Grosseller Pending <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G6["Grosseller Approved <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G7["Grosseller Orders <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G8["Grosseller Wallet <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G9["Grosseller Invoices <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G10["Grosseller Analytics <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G11["Grosseller Marketplace <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G12["Grosseller Support <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G13["Grosseller Chat <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G14["Grosseller Pixels <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    GD --> G15["Grosseller Settings <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    style GD fill:#F59E0B,stroke:#D97706,color:#fff
+    style G1 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G2 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G3 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G4 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G5 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G6 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G7 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G8 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G9 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G10 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G11 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G12 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G13 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G14 fill:#F59E0B,stroke:#D97706,color:#fff
+    style G15 fill:#F59E0B,stroke:#D97706,color:#fff
+    </pre>
+  </div>
+</div>
+
+<!-- AGENT -->
+<div id="tab-agent" class="diagram-section">
+  <div class="diagram-header">
+    <h2>6. Call Center Agent Dashboard</h2>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn('tab-agent')">🔍 +</button>
+      <button class="zoom-btn" onclick="zoomOut('tab-agent')">🔍 -</button>
+      <button class="zoom-btn" onclick="resetZoom('tab-agent')">🎯 Fit & Center</button>
+    </div>
+  </div>
+  <div class="mermaid-wrapper">
+    <pre class="mermaid">
+flowchart TD
+    AD["Agent Overview <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    AD --> A1["Agent Claim Leads <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    AD --> A2["Insert WhatsApp Lead <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    AD --> A3["Agent My Leads <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    A1 --> A1a["Agent Lead Detail <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    AD --> A4["Agent Orders <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    AD --> A5["Agent Delivery <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    AD --> A6["Agent Marketplace <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    AD --> A7["Agent Chat <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    AD --> A8["Agent Support <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    AD --> A9["Agent Settings <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    style AD fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style A1 fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style A2 fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style A3 fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style A1a fill:#A78BFA,stroke:#8B5CF6,color:#fff
+    style A4 fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style A5 fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style A6 fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style A7 fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style A8 fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style A9 fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    </pre>
+  </div>
+</div>
+
+<!-- HELPER -->
+<div id="tab-helper" class="diagram-section">
+  <div class="diagram-header">
+    <h2>7. Helper & Logistics Dashboard</h2>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn('tab-helper')">🔍 +</button>
+      <button class="zoom-btn" onclick="zoomOut('tab-helper')">🔍 -</button>
+      <button class="zoom-btn" onclick="resetZoom('tab-helper')">🎯 Fit & Center</button>
+    </div>
+  </div>
+  <div class="mermaid-wrapper">
+    <pre class="mermaid">
+flowchart TD
+    HD["Helper Overview <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H1["Helper Affiliate <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H2["Assigned Users <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H3["Helper Leads <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H4["Helper Products <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H5["Helper Parcels <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H6["Helper Returns <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H7["Barcode Return Scanner <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H8["Coliaty Pickup Notes <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H9["Helper Marketplace <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H10["Assigned Links <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    H10 --> H10a["SiteBuilder Editor <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    HD --> H11["Helper Settings <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    style HD fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H1 fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H2 fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H3 fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H4 fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H5 fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H6 fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H7 fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H8 fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H9 fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H10 fill:#14B8A6,stroke:#0D9488,color:#fff
+    style H10a fill:#2DD4BF,stroke:#14B8A6,color:#fff
+    style H11 fill:#14B8A6,stroke:#0D9488,color:#fff
+    </pre>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div id="tab-admin" class="diagram-section">
+  <div class="diagram-header">
+    <h2>8. Super Admin Dashboard</h2>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn('tab-admin')">🔍 +</button>
+      <button class="zoom-btn" onclick="zoomOut('tab-admin')">🔍 -</button>
+      <button class="zoom-btn" onclick="resetZoom('tab-admin')">🎯 Fit & Center</button>
+    </div>
+  </div>
+  <div class="mermaid-wrapper">
+    <pre class="mermaid">
+flowchart TD
+    ADM["Admin Dashboard <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ADM --> L1["Admin Leads <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ADM --> L2["Event Registrations <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    ADM --> L3["Admin Links <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    L3 --> L3a["SiteBuilder Editor <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    ADM --> UG["User Management Group <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    UG --> U1["User Directory <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    UG --> U2["Affiliate Helpers <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    UG --> U3["Account Verifications <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    UG --> U4["Call Center Inspector <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    UG --> U5["Influencer Inspector <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    UG --> U6["Support Inspector <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    ADM --> CG["Product Catalog Group <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    CG --> C1["Product Directory <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    CG --> C2["Product Categories <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    CG --> C3["Affiliate Product Claims <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    ADM --> FG["Finance Group <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    FG --> F1["Finance Dashboard <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    FG --> F2["Payment Monitoring <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    FG --> F3["User Invoices <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    ADM --> MK["Admin Marketplace <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    ADM --> SG["Support Group <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    SG --> S1["Support Tickets <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    SG --> S2["Live Chat <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    SG --> S3["Contact Messages <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    ADM --> TG["Tools System Group <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    TG --> T1["Announcements <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    TG --> T2["Professional Webmail <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    TG --> T3["Return Scanner <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    TG --> T4["Webhook Logs <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    TG --> T5["Webhook Tester <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    TG --> T6["Activity Audit Logs <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    TG --> T7["DB Backup Manager <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    ADM --> XG["Security Group <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    XG --> X1["Platform Settings <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+    XG --> X2["Security Firewall <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    ADM --> ST["Admin Settings <span class='api-badge'><span class='api-dot-pulse'></span>API</span>"]
+
+    style ADM fill:#1E293B,stroke:#475569,color:#fff
+    style L1 fill:#334155,stroke:#475569,color:#fff
+    style L2 fill:#334155,stroke:#475569,color:#fff
+    style L3 fill:#334155,stroke:#475569,color:#fff
+    style L3a fill:#475569,stroke:#64748B,color:#fff
+    style UG fill:#EF4444,stroke:#DC2626,color:#fff
+    style U1 fill:#334155,stroke:#475569,color:#fff
+    style U2 fill:#334155,stroke:#475569,color:#fff
+    style U3 fill:#334155,stroke:#475569,color:#fff
+    style U4 fill:#334155,stroke:#475569,color:#fff
+    style U5 fill:#334155,stroke:#475569,color:#fff
+    style U6 fill:#334155,stroke:#475569,color:#fff
+    style CG fill:#F59E0B,stroke:#D97706,color:#fff
+    style C1 fill:#334155,stroke:#475569,color:#fff
+    style C2 fill:#334155,stroke:#475569,color:#fff
+    style C3 fill:#334155,stroke:#475569,color:#fff
+    style FG fill:#10B981,stroke:#059669,color:#fff
+    style F1 fill:#334155,stroke:#475569,color:#fff
+    style F2 fill:#334155,stroke:#475569,color:#fff
+    style F3 fill:#334155,stroke:#475569,color:#fff
+    style MK fill:#334155,stroke:#475569,color:#fff
+    style SG fill:#3B82F6,stroke:#2563EB,color:#fff
+    style S1 fill:#334155,stroke:#475569,color:#fff
+    style S2 fill:#334155,stroke:#475569,color:#fff
+    style S3 fill:#334155,stroke:#475569,color:#fff
+    style TG fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style T1 fill:#334155,stroke:#475569,color:#fff
+    style T2 fill:#334155,stroke:#475569,color:#fff
+    style T3 fill:#334155,stroke:#475569,color:#fff
+    style T4 fill:#334155,stroke:#475569,color:#fff
+    style T5 fill:#334155,stroke:#475569,color:#fff
+    style T6 fill:#334155,stroke:#475569,color:#fff
+    style T7 fill:#334155,stroke:#475569,color:#fff
+    style XG fill:#EF4444,stroke:#DC2626,color:#fff
+    style X1 fill:#334155,stroke:#475569,color:#fff
+    style X2 fill:#334155,stroke:#475569,color:#fff
+    style ST fill:#334155,stroke:#475569,color:#fff
+  </pre>
+  </div>
+</div>
+
+<!-- API MODAL CONTAINER -->
+<div id="api-modal" class="api-modal-backdrop" onclick="if(event.target.id==='api-modal')closeApiModal()">
+  <div class="api-modal-card">
+    <div class="modal-header">
+      <div class="modal-title-group">
+        <h3 id="modal-page-title">Page Title <span id="modal-role-badge" class="role-badge">ROLE</span></h3>
+        <div id="modal-route-path" class="modal-route">/route/path</div>
+      </div>
+      <button class="modal-close-btn" onclick="closeApiModal()">✕</button>
+    </div>
+    <div id="modal-body-content" class="modal-body">
+      <!-- Injected Request Cards -->
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+mermaid.initialize({startOnLoad:true,theme:'dark',flowchart:{useMaxWidth:false,htmlLabels:true,curve:'basis'}});
+await mermaid.run();
+
+window.panZoomInstances = {};
+
+window.initOrRefreshPanZoom = function(tabId) {
+  const section = document.getElementById(tabId);
+  if (!section) return;
+
+  // Don't attempt initialization on hidden elements
+  if (section.classList.contains('hidden')) return;
+
+  const svg = section.querySelector('svg');
+  if (!svg) return;
+
+  // Clean explicit height/width attributes so CSS sizing works cleanly
+  svg.removeAttribute('height');
+  svg.removeAttribute('width');
+  svg.style.width = '100%';
+  svg.style.height = '100%';
+  svg.style.display = 'block';
+
+  let instance = window.panZoomInstances ? window.panZoomInstances[tabId] : null;
+
+  if (!instance) {
+    try {
+      instance = svgPanZoom(svg, {
+        zoomEnabled: true,
+        panEnabled: true,
+        controlIconsEnabled: false,
+        fit: true,
+        center: true,
+        minZoom: 0.01,
+        maxZoom: 30,
+        zoomScaleSensitivity: 0.2,
+        preventMouseEventsDefault: false
+      });
+      window.panZoomInstances[tabId] = instance;
+    } catch(e) {
+      console.warn("PanZoom init error on " + tabId, e);
+    }
+  }
+
+  if (instance) {
+    try {
+      instance.enablePan();
+      instance.enableZoom();
+      instance.resize();
+      instance.fit();
+      instance.center();
+    } catch(e) {
+      console.warn("PanZoom refresh error on " + tabId, e);
+    }
+  }
+};
+
+// Hide non-public tabs immediately after mermaid renders
+document.querySelectorAll('.diagram-section:not(#tab-public)').forEach(s=>s.classList.add('hidden'));
+
+// Initialize pan-zoom for initial visible tab
+setTimeout(() => {
+  window.initOrRefreshPanZoom('tab-public');
+}, 50);
+
+</script>
+
+<script>
+// Exhaustive API Specification Map for all page nodes
+window.API_SPEC_MAP = {
+  "YouCan Leads Sync": {
+    route: "/dashboard/youcan-leads",
+    role: "VENDOR / SELLER",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/youcan/orders",
+        desc: "Fetches all synchronized YouCan store orders from the system database.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: {
+          success: true,
+          data: [
+            {
+              id: 101,
+              ref: "YC-9981",
+              customer_name: "Karim Bennani",
+              phone: "0661234567",
+              total_price: 450,
+              currency: "MAD",
+              status: "Open",
+              payment_status: "Unpaid",
+              fulfillment_status: "Unfulfilled",
+              created_at: "2026-07-30T10:15:00Z"
+            }
+          ]
+        }
+      },
+      {
+        method: "POST",
+        endpoint: "/api/youcan/sync-now",
+        desc: "Triggers a live real-time GraphQL / REST synchronization fetch with YouCan.shop.",
+        headers: { "Authorization": "Bearer <jwt_token>", "Content-Type": "application/json" },
+        payload: {},
+        response: {
+          success: true,
+          message: "Mise à jour YouCan effectuée avec succès !",
+          syncedCount: 14
+        }
+      },
+      {
+        method: "POST",
+        endpoint: "/api/leads/push-integration",
+        desc: "Pushes selected YouCan orders into the Call Center agent lead pool for phone confirmation.",
+        headers: { "Authorization": "Bearer <jwt_token>", "Content-Type": "application/json" },
+        payload: {
+          source: "YOUCAN",
+          mode: "SELLER",
+          productId: 42,
+          orders: [
+            { id: 101, number: "YC-9981", customerName: "Karim Bennani", phone: "0661234567", city: "Casablanca", total: 450 }
+          ]
+        },
+        response: {
+          success: true,
+          message: "Prospects envoyés au Call Center avec succès !",
+          insertedCount: 1
+        }
+      }
+    ]
+  },
+
+  "Shopify Leads Sync": {
+    route: "/dashboard/shopify-leads",
+    role: "VENDOR / SELLER",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/shopify/orders",
+        desc: "Fetches synchronized Shopify orders for the vendor store.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: {
+          success: true,
+          data: [
+            { id: 201, name: "#1001", customer: { first_name: "Youssef" }, financial_status: "pending", total_price: 299 }
+          ]
+        }
+      },
+      {
+        method: "POST",
+        endpoint: "/api/shopify/sync-now",
+        desc: "Triggers Shopify Admin REST / Webhook order re-sync.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: {},
+        response: { success: true, message: "Mise à jour Shopify effectuée avec succès !" }
+      }
+    ]
+  },
+
+  "WooCommerce Sync": {
+    route: "/dashboard/woocommerce-leads",
+    role: "VENDOR / SELLER",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/woocommerce/orders",
+        desc: "Retrieves synced WooCommerce REST API orders.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { success: true, data: [{ id: 301, number: "301", status: "processing", total: "500.00" }] }
+      },
+      {
+        method: "POST",
+        endpoint: "/api/woocommerce/sync-now",
+        desc: "Polls WooCommerce webhook endpoint for new pending orders.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: {},
+        response: { success: true, message: "Mise à jour WooCommerce effectuée avec succès !" }
+      }
+    ]
+  },
+
+  "Google Sheets Sync": {
+    route: "/dashboard/sheets-leads",
+    role: "VENDOR",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/google-sheets/config",
+        desc: "Loads Google Sheets spreadsheet service account configuration.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { spreadsheetId: "1BxiMVs0XR...", sheetName: "Leads" }
+      },
+      {
+        method: "POST",
+        endpoint: "/api/google-sheets/sync-now",
+        desc: "Reads latest rows from linked Google Sheet and inserts leads into platform DB.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: { range: "Sheet1!A2:Z100" },
+        response: { success: true, importedRows: 28 }
+      }
+    ]
+  },
+
+  "Custom Domains": {
+    route: "/dashboard/domains",
+    role: "VENDOR",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/domain",
+        desc: "Retrieves custom CNAME domain bindings and SSL verification status.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { success: true, domains: [{ id: 1, domain: "store.mybrand.com", isVerified: true, sslActive: true }] }
+      },
+      {
+        method: "POST",
+        endpoint: "/api/domain/verify",
+        desc: "Checks DNS CNAME record resolution for custom domain verification.",
+        headers: { "Authorization": "Bearer <jwt_token>", "Content-Type": "application/json" },
+        payload: { domain: "store.mybrand.com" },
+        response: { success: true, verified: true, message: "Domain connected successfully!" }
+      }
+    ]
+  },
+
+  "Meta Pixel": {
+    route: "/dashboard/pixels/meta",
+    role: "VENDOR / GROSSELLER",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/user-pixels?platform=META",
+        desc: "Loads user configured Meta (Facebook) Pixel IDs and Conversions API tokens.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { pixels: [{ platform: "META", pixelId: "123456789", capiToken: "EAAB..." }] }
+      },
+      {
+        method: "POST",
+        endpoint: "/api/user-pixels",
+        desc: "Saves Meta Pixel configuration.",
+        headers: { "Authorization": "Bearer <jwt_token>", "Content-Type": "application/json" },
+        payload: { platform: "META", pixelId: "987654321", isEnabled: true },
+        response: { success: true, message: "Meta Pixel configured successfully." }
+      }
+    ]
+  },
+
+  "Google Pixel": {
+    route: "/dashboard/pixels/google",
+    role: "VENDOR / GROSSELLER",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/user-pixels?platform=GOOGLE",
+        desc: "Loads user Google Tag / Ads conversion pixel tracking ID.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { pixels: [{ platform: "GOOGLE", pixelId: "AW-10293847" }] }
+      }
+    ]
+  },
+
+  "TikTok Pixel": {
+    route: "/dashboard/pixels/tiktok",
+    role: "VENDOR / GROSSELLER",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/user-pixels?platform=TIKTOK",
+        desc: "Loads user TikTok Events API pixel configuration.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { pixels: [{ platform: "TIKTOK", pixelId: "C1234567890" }] }
+      }
+    ]
+  },
+
+  "Snapchat Pixel": {
+    route: "/dashboard/pixels/snapchat",
+    role: "VENDOR / GROSSELLER",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/user-pixels?platform=SNAPCHAT",
+        desc: "Loads user Snapchat Conversions API pixel ID.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { pixels: [{ platform: "SNAPCHAT", pixelId: "snap-99887766" }] }
+      }
+    ]
+  },
+
+  "Account Verifications": {
+    route: "/admin/verifications",
+    role: "SUPER ADMIN / CONFIRMATION AGENT",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/admin/verifications",
+        desc: "Fetches user identity proof submissions (CIN, Commercial Register, Legal Contracts).",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { verifications: [{ userId: 8, documentUrl: "/uploads/cin-8.pdf", status: "PENDING" }] }
+      },
+      {
+        method: "POST",
+        endpoint: "/api/admin/verifications/:id/approve",
+        desc: "Approves user identity and unlocks full seller withdrawal privileges.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: { note: "Verified CIN copy match" },
+        response: { success: true, message: "User account verified." }
+      }
+    ]
+  },
+
+  "Barcode Return Scanner": {
+    route: "/admin/scanner",
+    role: "ADMIN / HELPER LOGISTICS",
+    requests: [
+      {
+        method: "POST",
+        endpoint: "/api/fulfillment/scan-return",
+        desc: "Scans parcel tracking barcode and records inventory return restock.",
+        headers: { "Authorization": "Bearer <jwt_token>", "Content-Type": "application/json" },
+        payload: { barcode: "CLT-8849102", restockCondition: "GOOD" },
+        response: { success: true, parcelId: 512, status: "RETURNED_TO_STOCK" }
+      }
+    ]
+  },
+
+  "Home Page": {
+    route: "/",
+    role: "PUBLIC",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/products/public",
+        desc: "Fetches featured products slider & public pricing.",
+        headers: {},
+        payload: null,
+        response: { products: [{ id: 1, name: "Luxury Watch", retailPriceMad: 299 }] }
+      },
+      {
+        method: "GET",
+        endpoint: "/api/masterclasses/active",
+        desc: "Loads active masterclass events for homepage banner.",
+        headers: {},
+        payload: null,
+        response: { activeEvent: { title: "E-Com Scaling 2026", date: "2026-08-15" } }
+      }
+    ]
+  },
+
+  "Login Page": {
+    route: "/login",
+    role: "PUBLIC",
+    requests: [
+      {
+        method: "POST",
+        endpoint: "/api/auth/login",
+        desc: "Authenticates platform user credentials and returns JWT bearer token.",
+        headers: { "Content-Type": "application/json" },
+        payload: { email: "vendor@silacod.com", password: "••••••••" },
+        response: {
+          token: "eyJhbGciOiJIUzI1Ni...",
+          user: { id: 12, email: "vendor@silacod.com", role: "VENDOR", mode: "SELLER" }
+        }
+      }
+    ]
+  },
+
+  "Register Page": {
+    route: "/register",
+    role: "PUBLIC",
+    requests: [
+      {
+        method: "POST",
+        endpoint: "/api/auth/register",
+        desc: "Registers a new vendor or affiliate user on the platform.",
+        headers: { "Content-Type": "application/json" },
+        payload: { email: "newuser@silacod.com", password: "••••••••", role: "VENDOR", phone: "0600000000" },
+        response: { success: true, message: "User registered. Please verify email." }
+      }
+    ]
+  },
+
+  "Visitor Referral Link": {
+    route: "/r/:code",
+    role: "PUBLIC / TRAFFIC ENGINE",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/referrals/resolve/:code",
+        desc: "Evaluates cloaking rules & pixel logs for incoming visitor traffic.",
+        headers: { "User-Agent": "Mozilla/5.0 ...", "X-Forwarded-For": "105.158.12.4" },
+        payload: null,
+        response: { action: "ALLOW", targetUrl: "/landing/vip-product", cloaked: false }
+      }
+    ]
+  },
+
+  "Cloaking Evaluator": {
+    route: "Traffic Filter Engine",
+    role: "SYSTEM SECURITY",
+    requests: [
+      {
+        method: "POST",
+        endpoint: "/api/cloaking/evaluate",
+        desc: "Runs multi-layer bot filtering (UA, GeoIP, VPN DOM probing, Subnet ranges).",
+        headers: { "Content-Type": "application/json" },
+        payload: { ip: "105.158.12.4", userAgent: "Googlebot/2.1", referrer: "" },
+        response: { isBot: true, redirectUrl: "https://wikipedia.org", ruleMatched: "BOT_UA" }
+      }
+    ]
+  },
+
+  "Render Landing Page": {
+    route: "/landing/:id",
+    role: "PUBLIC VISITOR",
+    requests: [
+      {
+        method: "POST",
+        endpoint: "/api/leads/public-submit",
+        desc: "Submits a cash-on-delivery order lead directly from landing page form.",
+        headers: { "Content-Type": "application/json" },
+        payload: { fullName: "Amine Radi", phone: "0612345678", city: "Rabat", address: "Agdal 12", productId: 5 },
+        response: { success: true, leadId: 8841, status: "RECEIVED" }
+      }
+    ]
+  },
+
+  "User Directory": {
+    route: "/admin/users",
+    role: "SUPER ADMIN",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/admin/users",
+        desc: "Retrieves complete user list with role filters & account verification statuses.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { users: [{ id: 1, name: "Admin", email: "admin@silacod.com", role: "ADMIN", isVerified: true }] }
+      },
+      {
+        method: "DELETE",
+        endpoint: "/api/admin/users/:id",
+        desc: "Deletes a user account and purges related session tokens.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: { reason: "Security violation" },
+        response: { success: true, message: "User account deleted." }
+      }
+    ]
+  },
+
+  "Platform Settings": {
+    route: "/admin/settings",
+    role: "SUPER ADMIN",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/admin/settings",
+        desc: "Loads platform global configuration.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { platformName: "Silacod", supportEmail: "support@silacod.com", maintenanceMode: false }
+      },
+      {
+        method: "PUT",
+        endpoint: "/api/admin/settings",
+        desc: "Updates global platform configuration settings.",
+        headers: { "Authorization": "Bearer <jwt_token>", "Content-Type": "application/json" },
+        payload: { platformName: "Silacod Pro", maintenanceMode: false },
+        response: { success: true, message: "Settings updated successfully." }
+      }
+    ]
+  },
+
+  "Security Firewall": {
+    route: "/admin/security",
+    role: "SUPER ADMIN",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/admin/security/cloaking",
+        desc: "Loads system-wide cloaking rules, bot user agents, and IP blacklist.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { filterBots: true, botRedirectUrl: "https://wikipedia.org", blockedUserAgents: ["googlebot", "ahrefs"] }
+      },
+      {
+        method: "PUT",
+        endpoint: "/api/admin/security/cloaking",
+        desc: "Saves platform-wide security firewall cloaking rules.",
+        headers: { "Authorization": "Bearer <jwt_token>", "Content-Type": "application/json" },
+        payload: { filterBots: true, filterVpn: true, filterDns: true },
+        response: { success: true, message: "Cloaking rules saved." }
+      }
+    ]
+  },
+
+  "SiteBuilder Editor": {
+    route: "/builder/:id",
+    role: "VENDOR / INFLUENCER / HELPER",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/sitebuilder/page/:id",
+        desc: "Fetches page visual block structure, cloaking settings, and custom CSS.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { id: 12, title: "Offer Page", customStructure: { blocks: [], settings: { cloaking: { enabled: true } } } }
+      },
+      {
+        method: "PUT",
+        endpoint: "/api/sitebuilder/page/:id",
+        desc: "Saves updated drag-and-drop page components and cloaking settings.",
+        headers: { "Authorization": "Bearer <jwt_token>", "Content-Type": "application/json" },
+        payload: { title: "Offer Page VIP", customStructure: { blocks: [{ type: "hero", content: "Sale 50%" }] } },
+        response: { success: true, message: "Page saved successfully." }
+      }
+    ]
+  },
+
+  "DB Backup Manager": {
+    route: "/admin/backups",
+    role: "SUPER ADMIN",
+    requests: [
+      {
+        method: "GET",
+        endpoint: "/api/admin/backups",
+        desc: "Lists automated MySQL database backup snapshots.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { backups: [{ filename: "backup-2026-07-30.sql.gz", sizeBytes: 4589210 }] }
+      },
+      {
+        method: "POST",
+        endpoint: "/api/admin/backups/create",
+        desc: "Triggers instant full database SQL dump.",
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: {},
+        response: { success: true, filename: "backup-instant.sql.gz" }
+      }
+    ]
+  }
+};
+
+window.getFallbackApiSpec = function(title) {
+  const cleanTitle = title.replace(/<[^>]*>/g, '').trim();
+  const slug = cleanTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return {
+    route: `/dashboard/${slug}`,
+    role: "PLATFORM USER",
+    requests: [
+      {
+        method: "GET",
+        endpoint: `/api/${slug}/data`,
+        desc: `Retrieves data model records for ${cleanTitle}.`,
+        headers: { "Authorization": "Bearer <jwt_token>" },
+        payload: null,
+        response: { success: true, data: [], total: 0 }
+      },
+      {
+        method: "POST",
+        endpoint: `/api/${slug}/update`,
+        desc: `Updates resources associated with ${cleanTitle}.`,
+        headers: { "Authorization": "Bearer <jwt_token>", "Content-Type": "application/json" },
+        payload: { action: "SAVE", status: "ACTIVE" },
+        response: { success: true, message: "Operation completed successfully." }
+      }
+    ]
+  };
+};
+
+window.findSpec = function(cleanTitle) {
+  const normTitle = cleanTitle.toLowerCase().trim();
+  for (const key of Object.keys(window.API_SPEC_MAP)) {
+    if (key.toLowerCase().trim() === normTitle) {
+      return window.API_SPEC_MAP[key];
+    }
+  }
+  for (const key of Object.keys(window.API_SPEC_MAP)) {
+    if (normTitle.includes(key.toLowerCase().trim()) || key.toLowerCase().trim().includes(normTitle)) {
+      return window.API_SPEC_MAP[key];
+    }
+  }
+  return window.getFallbackApiSpec(cleanTitle);
+};
+
+window.openApiModal = function(title, spec) {
+  const titleEl = document.getElementById('modal-page-title');
+  if (titleEl) {
+    titleEl.childNodes[0].nodeValue = title + " ";
+  }
+  const roleEl = document.getElementById('modal-role-badge');
+  if (roleEl) {
+    roleEl.textContent = spec.role || "USER";
+  }
+  const routeEl = document.getElementById('modal-route-path');
+  if (routeEl) {
+    routeEl.textContent = spec.route || "/route";
+  }
+
+  const bodyEl = document.getElementById('modal-body-content');
+  if (bodyEl) {
+    bodyEl.innerHTML = '';
+
+    (spec.requests || []).forEach((req) => {
+      const card = document.createElement('div');
+      card.className = 'req-card';
+      
+      const methodClass = `method-${(req.method || 'GET').toLowerCase()}`;
+      const payloadStr = req.payload ? JSON.stringify(req.payload, null, 2) : 'None';
+      const responseStr = req.response ? JSON.stringify(req.response, null, 2) : '{}';
+      const headersStr = req.headers ? JSON.stringify(req.headers, null, 2) : '{}';
+
+      card.innerHTML = `
+        <div class="req-header">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="method-badge ${methodClass}">${req.method || 'GET'}</span>
+            <span class="req-url">${req.endpoint || '/api/endpoint'}</span>
+          </div>
+        </div>
+        <div class="req-desc">${req.desc || ''}</div>
+        
+        <div class="code-box-title">
+          <span>Headers</span>
+        </div>
+        <pre class="code-block" style="max-height:60px;">${headersStr}</pre>
+
+        <div class="code-box-title">
+          <span>Request Payload (Body)</span>
+          <button class="copy-btn" onclick="copyText(\`${payloadStr.replace(/`/g, '\\`')}\`)">Copy JSON</button>
+        </div>
+        <pre class="code-block">${payloadStr}</pre>
+
+        <div class="code-box-title">
+          <span>Response Payload (Schema)</span>
+          <button class="copy-btn" onclick="copyText(\`${responseStr.replace(/`/g, '\\`')}\`)">Copy JSON</button>
+        </div>
+        <pre class="code-block" style="color:#a7f3d0;">${responseStr}</pre>
+      `;
+      bodyEl.appendChild(card);
+    });
+  }
+
+  const modalEl = document.getElementById('api-modal');
+  if (modalEl) {
+    modalEl.classList.add('active');
+  }
+};
+
+window.closeApiModal = function() {
+  const modalEl = document.getElementById('api-modal');
+  if (modalEl) {
+    modalEl.classList.remove('active');
+  }
+};
+
+window.copyText = function(str) {
+  navigator.clipboard.writeText(str);
+  alert('JSON copied to clipboard!');
+};
+
+// Global Delegated Click Listener on Document
+document.addEventListener('click', function(e) {
+  const nodeEl = e.target.closest('.node');
+  if (nodeEl) {
+    const rawText = nodeEl.textContent || '';
+    const cleanTitle = rawText
+      .replace(/\s+/g, ' ')
+      .replace(/⚡/g, '')
+      .replace(/\bAPI\b/g, '')
+      .trim();
+    
+    const spec = window.findSpec(cleanTitle);
+    window.openApiModal(cleanTitle, spec);
+  }
+});
+
+// Keyboard shortcuts (Esc to close)
+window.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') window.closeApiModal();
+});
+
+window.showTab = function(name){
+  const tabId = 'tab-' + name;
+  document.querySelectorAll('.diagram-section').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  
+  const activeSec = document.getElementById(tabId);
+  if (activeSec) {
+    activeSec.classList.remove('hidden');
+  }
+
+  // Highlight active tab button
+  document.querySelectorAll('.tab').forEach(t => {
+    if (t.getAttribute('onclick') && t.getAttribute('onclick').includes(`'${name}'`)) {
+      t.classList.add('active');
+    }
+  });
+
+  // Allow DOM to compute layout dimensions for newly visible section
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      window.initOrRefreshPanZoom(tabId);
+    }, 60);
+  });
+};
+
+window.zoomIn = function(tabId){
+  let instance = window.panZoomInstances ? window.panZoomInstances[tabId] : null;
+  if (!instance) {
+    window.initOrRefreshPanZoom(tabId);
+    instance = window.panZoomInstances ? window.panZoomInstances[tabId] : null;
+  }
+  if (instance) instance.zoomIn();
+};
+
+window.zoomOut = function(tabId){
+  let instance = window.panZoomInstances ? window.panZoomInstances[tabId] : null;
+  if (!instance) {
+    window.initOrRefreshPanZoom(tabId);
+    instance = window.panZoomInstances ? window.panZoomInstances[tabId] : null;
+  }
+  if (instance) instance.zoomOut();
+};
+
+window.resetZoom = function(tabId){
+  window.initOrRefreshPanZoom(tabId);
+};
+</script>
+
+</body>
+</html>

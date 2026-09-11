@@ -13,7 +13,7 @@ import {
   ChevronDown, ChevronUp, Package, X, Eye, RefreshCw,
   SlidersHorizontal, Wallet, TrendingUp, MessageCircle, Link2,
   FileSpreadsheet, PhoneCall, StickyNote, Home, Hash,
-  Store, Megaphone, MonitorPlay, Globe, Wifi, PlayCircle, ExternalLink, Ban,
+  Store, Megaphone, MonitorPlay, Globe, Wifi, PlayCircle, ExternalLink, Ban, ShieldAlert,
 } from 'lucide-react';
 import { buildReferralUrl } from '../../utils/referral';
 import { fetchAllPages } from '../../utils/paging';
@@ -1286,6 +1286,20 @@ export default function AdminLeads() {
                                 >
                                   <Ban className="w-2.5 h-2.5" />
                                 </button>
+                                {/* Orders that had come from this address in the
+                                    24h ending at this one — the same count the
+                                    automatic ban fires on, so a badge here marks
+                                    a row that tripped the threshold (or would
+                                    have, had it been switched on). */}
+                                {lead.ipSuspect && (
+                                  <span
+                                    className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full border border-red-100 text-[9px] font-black uppercase tracking-wider font-sans"
+                                    title={`${lead.ipOrderCount} commandes depuis cette connexion en 24 h`}
+                                  >
+                                    <ShieldAlert className="w-2.5 h-2.5" />
+                                    Fake lead
+                                  </span>
+                                )}
                               </div>
                             )}
                           </div>

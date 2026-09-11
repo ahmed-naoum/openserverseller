@@ -15,6 +15,7 @@ import { buildReferralUrl } from '../../utils/referral';
 import { containsBlockedWord } from '../../utils/blockedWords';
 import { currentBasePath } from '../../lib/dashboardBase';
 import { canUseLinkBuilder } from '../../lib/subAccountPermissions';
+import { SweetAlertCard } from '../../components/ui/SweetAlert';
 
 export default function InfluencerLinks() {
   const { t } = useLanguage();
@@ -1231,29 +1232,22 @@ export default function InfluencerLinks() {
         )}
       </div>
 
-      {/* OTP Verification Modal */}
-      {confirmModal.isOpen && createPortal(
-        <div 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-300 cursor-pointer"
-          onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-        >
-          <div 
-            className="bg-white rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200 cursor-default"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-6 sm:p-8 text-center">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto mb-4 sm:mb-6 flex items-center justify-center bg-slate-50">
-                {confirmModal.icon}
-              </div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mb-2 sm:mb-3">
-                {confirmModal.title}
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-500 font-medium leading-relaxed mb-6">
-                {confirmModal.message}
-              </p>
-
+      <SweetAlertCard
+        open={confirmModal.isOpen}
+        type={confirmModal.variant === 'danger' ? 'danger' : 'question'}
+        icon={confirmModal.icon}
+        title={confirmModal.title}
+        text={confirmModal.message}
+        loading={!!confirmModal.isLoading}
+        confirmDisabled={confirmModal.step === 'verify' && confirmInputValue.length !== 6}
+        cancelText={t('btn_cancel', 'links')}
+        confirmText={confirmModal.confirmText}
+        focus={confirmModal.step === 'verify' ? 'none' : undefined}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.step === 'verify' ? handleVerifyOtp : confirmModal.onConfirm}
+      >
               {confirmModal.step === 'verify' && (
-                <div className="animate-in slide-in-from-bottom-2 duration-300">
+                <div className="animate-in slide-in-from-bottom-2 duration-300 text-center">
                   <div className="flex justify-center gap-1.5 sm:gap-2 mb-4">
                     {[0, 1, 2, 3, 4, 5].map((i) => (
                       <input
@@ -1297,32 +1291,7 @@ export default function InfluencerLinks() {
                   </p>
                 </div>
               )}
-            </div>
-            <div className="p-6 sm:p-8 bg-slate-50/50 flex gap-3 sm:gap-4">
-              <button
-                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                disabled={confirmModal.isLoading}
-                className="flex-1 px-4 sm:px-6 py-3.5 sm:py-4 text-xs font-black uppercase tracking-widest text-slate-400 bg-white border border-slate-100 rounded-2xl transition-all disabled:opacity-50"
-              >
-                {t('btn_cancel', 'links')}
-              </button>
-              <button
-                onClick={confirmModal.step === 'verify' ? handleVerifyOtp : confirmModal.onConfirm}
-                disabled={confirmModal.isLoading || (confirmModal.step === 'verify' && confirmInputValue.length !== 6)}
-                className={`flex-1 px-4 sm:px-6 py-3.5 sm:py-4 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
-                  confirmModal.variant === 'danger' ? 'bg-red-500 hover:bg-red-600' : 'bg-slate-900 hover:bg-slate-800'
-                }`}
-              >
-                {confirmModal.isLoading && (
-                  <RefreshCw size={14} className="animate-spin" />
-                )}
-                {confirmModal.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      </SweetAlertCard>
 
       {/* QR Code Modal */}
       {showQrModal && selectedLink && createPortal(

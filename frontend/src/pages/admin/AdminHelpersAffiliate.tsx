@@ -90,7 +90,7 @@ export default function AdminHelpersAffiliate() {
   const totalEarningsGenerated = helpers.reduce((sum: number, h: any) => sum + (h.totalEarnings || 0), 0);
 
   return (
-    <div className="space-y-8 p-4 md:p-8 max-w-[1600px] mx-auto animate-in fade-in duration-300">
+    <div className="space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-300">
       {/* Header Banner */}
       <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-r from-amber-600 via-orange-600 to-indigo-700 p-8 md:p-12 text-white shadow-2xl">
         <div className="absolute top-0 right-0 -mt-12 -mr-12 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />

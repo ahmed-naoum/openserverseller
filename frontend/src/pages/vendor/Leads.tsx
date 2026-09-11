@@ -20,12 +20,13 @@ import {
   Users, MousePointerClick, UserCheck, ShoppingCart,
   Filter, Search, Calendar,
   MapPin, Phone, Package, Clock, Trash2, Headphones, RefreshCw,
-  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare, Plus, Wallet, FileSpreadsheet, Lock
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare, Plus, Wallet, FileSpreadsheet, Lock, Ban, ShieldAlert, ShieldCheck
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { currentBasePath } from '../../lib/dashboardBase';
 import GoogleSheetOutboundPanel, { useOutboundStatus } from '../../components/vendor/GoogleSheetOutboundPanel';
 import { formatMoney } from '../../lib/sheetMoney';
+import PageHeader from '../../components/common/PageHeader';
 
 /**
  * The numeric lead id behind a table row.
@@ -751,6 +752,49 @@ export default function VendorLeads() {
     );
   };
 
+  /**
+   * Block (or unblock) the customer behind one order on this seller's pages.
+   *
+   * Sent by lead id: the address never reaches this component, so the button
+   * cannot target anything but the order it sits on. Blocking is confirmed
+   * because it is aimed at a connection, not an account — one address can sit in
+   * front of a whole neighbourhood on a mobile network — while unblocking is
+   * immediate, since nothing is lost by undoing it.
+   */
+  const [banningLeadId, setBanningLeadId] = useState<number | null>(null);
+
+  const runIpBanToggle = async (leadId: number, currentlyBanned: boolean) => {
+    setBanningLeadId(leadId);
+    try {
+      const res = currentlyBanned
+        ? await influencerApi.unbanLeadIp(leadId)
+        : await influencerApi.banLeadIp(leadId);
+      toast.success(res.data?.message || t('done', 'leads', 'Fait'));
+      loadData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || t('error_generic', 'leads', 'Erreur'));
+    } finally {
+      setBanningLeadId(null);
+    }
+  };
+
+  const handleToggleIpBan = (leadId: number, currentlyBanned: boolean) => {
+    if (currentlyBanned) {
+      runIpBanToggle(leadId, true);
+      return;
+    }
+    setConfirmModal({
+      isOpen: true,
+      title: t('confirm_ban_title', 'leads', 'Bloquer ce client ?'),
+      message: t('confirm_ban_msg', 'leads', "Il ne pourra plus passer commande sur vos pages ni sur votre boutique. Vos autres commandes ne changent pas, et vous pouvez le débloquer à tout moment. Attention : plusieurs clients peuvent partager la même connexion (réseau mobile)."),
+      variant: 'danger',
+      onConfirm: async () => {
+        await runIpBanToggle(leadId, false);
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
   const handleBulkPush = (idsToPush?: number[]) => {
     const ids = idsToPush || selectedIds;
     if (ids.length === 0) return;
@@ -1019,23 +1063,23 @@ export default function VendorLeads() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-              {t('title', 'leads', 'Mes Leads & Parrainages')}
-            </h1>
+      <PageHeader
+        icon={Users}
+        title={
+          <span className="flex items-center gap-3">
+            {t('title', 'leads', 'Mes Leads & Parrainages')}
             <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg border ${
-              currentMode === 'SELLER' 
-                ? 'bg-emerald-50 text-emerald-600 border-emerald-200' 
+              currentMode === 'SELLER'
+                ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
                 : 'bg-blue-50 text-blue-600 border-blue-200'
             }`}>
               {currentMode === 'SELLER' ? t('mode_seller', 'dashboard', 'Mode Vendeur') : t('mode_affiliate', 'dashboard', 'Mode Affilié')}
             </span>
-          </div>
-          <p className="text-sm text-gray-500 mt-1">{t('subtitle', 'leads', 'Suivez tous vos leads, conversions et livraisons en un seul endroit.')}</p>
-        </div>
-        <div className="flex gap-2">
+          </span>
+        }
+        subtitle={t('subtitle', 'leads', 'Suivez tous vos leads, conversions et livraisons en un seul endroit.')}
+        actions={
+          <div className="flex gap-2">
           <button
             onClick={() => navigate(`${currentBasePath(user?.role)}/leads/new?mode=${currentMode}`)}
             className={`flex items-center gap-1.5 px-4 py-2 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:opacity-95 transition-all ${
@@ -1063,8 +1107,9 @@ export default function VendorLeads() {
             {t('stats', 'leads', 'Statistiques')}
           </button>
 
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {/* Outbound Google Sheet — sellers only, and above the collapsible stats so
           it is on screen the moment the page loads. */}
@@ -1661,6 +1706,27 @@ export default function VendorLeads() {
                       (commission.order as any)?.items
                     );
 
+                    // A store checkout (boutique) has no referral link, so
+                    // none of the resolutions above find a product. The
+                    // basket the customer built rides on the lead as
+                    // cartItems; the Produit cell reads name, image, SKU and
+                    // total units from it, the way a landing-page row reads
+                    // them from its link.
+                    const cartItems: any[] = Array.isArray(rowLead?.cartItems) ? rowLead.cartItems : [];
+                    const cartFirst = cartItems[0];
+                    const cartProductName = cartFirst
+                      ? cartItems.length > 1
+                        ? `${cartFirst.productName} +${cartItems.length - 1}`
+                        : cartFirst.productName
+                      : null;
+                    const cartImage = cartFirst?.imageUrl || null;
+                    const cartSku = cartItems.length === 1 ? cartFirst?.sku || null : null;
+                    const cartQty = cartItems.reduce((sum: number, it: any) => sum + (Number(it?.quantity) || 0), 0);
+                    const rowProductImage = productImage ?? cartImage;
+                    const rowProductName = productName || cartProductName || noteProductName;
+                    const rowProductSku = productSku || cartSku;
+                    const rowQty = cartItems.length ? cartQty : packQty;
+
                     // Where this row stands in the seller's sheet. The two are
                     // exclusive on the server: a line we wrote is either still
                     // there (sent) or the seller deleted it (removed).
@@ -1674,6 +1740,16 @@ export default function VendorLeads() {
                     // seller has to be able to see WHY it is unavailable.
                     const isLocked = isRowLocked(commission);
                     const lockedActionTooltip = t('locked_action_tooltip', 'leads', 'Indisponible tant que ce lead est verrouillé — rechargez vos crédits pour le débloquer.');
+
+                    // What the seller is allowed to know about the customer's
+                    // connection: how many orders came from it, and whether they
+                    // have blocked it. Never the address itself — the server
+                    // strips it from this payload, and the ban below is sent by
+                    // lead id, so there is nothing to show and nothing to typo.
+                    const ipOrderCount = Number(rowLead?.ipOrderCount || 0);
+                    const ipSuspect = rowLead?.ipSuspect === true;
+                    const ipBanned = rowLead?.ipBanned === true;
+                    const canBanIp = rowLead?.canBanIp === true && sheetLeadId !== null;
 
                     return (
                       <tr key={commission.id} className={`hover:bg-gray-50/50 transition-colors group ${selectedIds.includes(Number(String(commission.id).replace('lead-', ''))) ? 'bg-influencer-50/30' : ''}`}>
@@ -1769,6 +1845,30 @@ export default function VendorLeads() {
                                   {t('removed_from_sheet_short', 'leads', 'Retiré de la feuille')}
                                 </span>
                               )}
+                              {/* Several orders off the same connection inside
+                                  24h — the exact count the automatic ban fires
+                                  on. A signal, not a verdict: a family, an
+                                  office and a whole mobile cell share one
+                                  address, so the row is left where it is and
+                                  the seller decides. */}
+                              {ipSuspect && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full border border-red-100 text-[9px] font-black uppercase tracking-wider"
+                                  title={t('ip_suspect_tooltip', 'leads', '{count} commandes sont parties de la même connexion en 24 h — vérifiez avant de confirmer.').replace('{count}', String(ipOrderCount))}
+                                >
+                                  <ShieldAlert className="w-2.5 h-2.5" />
+                                  {t('ip_fake_short', 'leads', 'Fake lead')}
+                                </span>
+                              )}
+                              {ipBanned && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full border border-slate-200 text-[9px] font-black uppercase tracking-wider"
+                                  title={t('ip_banned_tooltip', 'leads', 'Vous avez bloqué ce client : il ne peut plus commander sur vos pages.')}
+                                >
+                                  <Ban className="w-2.5 h-2.5" />
+                                  {t('ip_banned_short', 'leads', 'Bloqué')}
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-500 font-medium uppercase tracking-wider">
                               {/* Masked server-side, so the muted tone and the
@@ -1794,17 +1894,17 @@ export default function VendorLeads() {
                         {/* Produit */}
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
-                            {productImage ? (
-                              <img src={productImage} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                            {rowProductImage ? (
+                              <img src={rowProductImage} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                             ) : (
                               <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
                                 <Package className="w-4 h-4 text-gray-400" />
                               </div>
                             )}
                             <div className="flex flex-col">
-                              <span className="text-sm font-bold text-gray-900">{productName || noteProductName || '-'}</span>
+                              <span className="text-sm font-bold text-gray-900">{rowProductName || '-'}</span>
                               <span className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">
-                                SKU: {productSku || '-'} | QTE: {packQty}
+                                SKU: {rowProductSku || '-'} | QTE: {rowQty}
                               </span>
                             </div>
                           </div>
@@ -1948,6 +2048,28 @@ export default function VendorLeads() {
                         {/* Actions */}
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-1">
+                            {/* Outside the status branch below on purpose: a
+                                fake order is worth blocking whether it is still
+                                a lead or already went to the call centre. Shown
+                                only for leads this account owns and that carry a
+                                connection to block — an imported or WhatsApp
+                                lead has none. */}
+                            {canBanIp && (
+                              <button
+                                onClick={() => handleToggleIpBan(sheetLeadId!, ipBanned)}
+                                disabled={banningLeadId === sheetLeadId}
+                                className={`p-1.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
+                                  ipBanned
+                                    ? 'text-slate-500 bg-slate-100 hover:bg-slate-200'
+                                    : 'text-gray-300 hover:text-red-600 hover:bg-red-50'
+                                }`}
+                                title={ipBanned
+                                  ? t('unban_customer', 'leads', 'Débloquer ce client — il pourra à nouveau commander sur vos pages')
+                                  : t('ban_customer', 'leads', 'Bloquer ce client — il ne pourra plus commander sur vos pages')}
+                              >
+                                {ipBanned ? <ShieldCheck className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
+                              </button>
+                            )}
                             {commission.order?.status === 'LEAD' && (
                               <>
                                 {/* Left in place and greyed rather than dropped:

@@ -162,18 +162,18 @@ export default function SheetCreditsIndicator() {
     return type;
   };
 
-  // Same chrome as the search / fullscreen buttons, only wider to fit the number.
+  // Same chrome as the header's icon buttons, only wider to fit the number.
   const tone = level === 'danger'
-    ? 'bg-rose-50 border-rose-200 text-rose-600 hover:border-rose-300'
+    ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
     : level === 'warn'
-    ? 'bg-amber-50 border-amber-200 text-amber-600 hover:border-amber-300'
-    : `bg-white text-slate-400 ${open ? 'border-primary-200 text-primary-600' : 'border-slate-100 hover:text-primary-600 hover:border-primary-200'}`;
+    ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+    : `text-slate-700 ${open ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-100/70 border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm'}`;
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className={`relative flex items-center gap-1 py-2 px-2 rounded-lg border transition-all shadow-sm hover:shadow-md active:scale-95 ${tone}`}
+        className={`relative h-9 flex items-center gap-1.5 px-2.5 rounded-xl border transition-all ${tone}`}
         title={[
           // The pack first: it is the reason the balance beside it can sit at $0.00
           // without anything being wrong, so it has to be the first thing read.
@@ -189,9 +189,9 @@ export default function SheetCreditsIndicator() {
           .join(' · ')}
         id="sheet-credits-toggle"
       >
-        <Wallet size={16} />
+        <Wallet size={15} className="opacity-70" />
         {/* Cents, always through the formatter — printed raw this reads "15" for $0.15. */}
-        <span className="text-[11px] font-black leading-none tabular-nums">{formatMoney(balance)}</span>
+        <span className="text-xs font-semibold leading-none tabular-nums">{formatMoney(balance)}</span>
         {/* The pack name, when the account is on one. Truncated and capped rather
             than wrapped: the header row is fixed-height, and a long pack name must
             never push the language or notification buttons off the edge. */}
@@ -201,7 +201,7 @@ export default function SheetCreditsIndicator() {
         {plan?.planName && (
           <span
             style={planAccent.chip}
-            className="hidden sm:inline-block max-w-[90px] truncate px-1.5 py-0.5 rounded-md text-[10px] font-black leading-none uppercase tracking-wide"
+            className="hidden sm:inline-block max-w-[90px] truncate px-1.5 py-0.5 rounded-md text-[10px] font-semibold leading-none"
           >
             {plan.planName}
           </span>

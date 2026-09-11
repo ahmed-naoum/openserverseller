@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { loadLanguage, initialLanguage } from './contexts/LanguageContext';
 import './styles/globals.css';
+// After globals on purpose: the skin's selectors tie with Tailwind's hover:
+// utilities on specificity and must come later in the cascade to win.
+import './styles/dashboard-skin.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {

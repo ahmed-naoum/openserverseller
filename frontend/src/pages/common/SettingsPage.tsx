@@ -24,6 +24,7 @@ import toast from 'react-hot-toast';
 import ProfileVerification from './ProfileVerification';
 import AvatarCropModal from '../../components/common/AvatarCropModal';
 import BankSelect from '../../components/common/BankSelect';
+import { swal } from '../../components/ui/SweetAlert';
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
@@ -1312,8 +1313,8 @@ export default function SettingsPage() {
                                 <input
                                     type="checkbox"
                                     checked={true}
-                                    onChange={() => {
-                                        if (confirm(t('disable_2fa_confirm', 'dashboard'))) {
+                                    onChange={async () => {
+                                        if (await swal.warn({ title: t('disable_2fa_confirm', 'dashboard'), confirmText: t('confirm', 'dashboard') })) {
                                             disable2FAMutation.mutate();
                                         }
                                     }}

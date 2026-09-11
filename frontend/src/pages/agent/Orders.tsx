@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ordersApi } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { swal } from '../../components/ui/SweetAlert';
 
 export default function AgentOrders() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -35,8 +36,8 @@ export default function AgentOrders() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+    <div className="max-w-7xl mx-auto space-y-6">
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Commandes Pushées</h1>
           <p className="text-gray-500 mt-1">
@@ -233,7 +234,7 @@ export default function AgentOrders() {
               {selectedOrder.status === 'PENDING' && (
                 <button
                   onClick={async () => {
-                    if (window.confirm("Êtes-vous sûr de vouloir annuler cette commande et la renvoyer dans la liste des prospects (Leads) ?")) {
+                    if (await swal.warn({ title: 'Annuler cette commande ?', text: 'Elle sera renvoyée dans la liste des prospects (Leads).', confirmText: 'Annuler la commande', cancelText: 'Retour' })) {
                       try {
                         setReverting(true);
                         await ordersApi.revertToLead(selectedOrder.id);

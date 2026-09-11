@@ -2,6 +2,8 @@ import zlib from 'zlib';
 import { PrismaClient } from '@prisma/client';
 import { renderDocument } from './document.js';
 import { supportedTypes } from './blocks/index.js';
+import { flatBlocks, isDocument } from '../../shared/document/migrate.js';
+import { themeFromLandingPage, resolveBlocks, resolveDocument } from '../../shared/document/theme.js';
 
 const prisma = new PrismaClient();
 
@@ -46,7 +48,23 @@ const prisma = new PrismaClient();
 //     row carries neither the data-vid-redirect attribute nor a runtime that
 //     would act on it. Six live pages have a destination configured and go
 //     nowhere; they MUST recompile for it to take effect.
-export const COMPILER_VERSION = 14;
+// 15: abandoned-checkout capture. A stored 14 row has no beacon in its runtime
+//     at all, so every cart abandoned on it is invisible to the call centre —
+//     the feature has been dark on compiled pages since SSG_LANDING was turned
+//     on, because the capture only ever existed in the React page's socket.
+// 16: site_header / site_footer blocks. A stored 15 row cannot contain them —
+//     the type was rejected by validation until now — so this bump exists for
+//     the shared stylesheet, not for any page already saved.
+// 17: text, header and countdown renderers. Any page carrying one of these was
+//     declined by the compiler and served by the SPA; now it compiles. Stored
+//     rows are unaffected (they were never compiled), so the bump is for the
+//     shared stylesheet only.
+// 18: product_detail block, the cart runtime, and products blocks that carry
+//     compile-time items (store pages). Landing pages are unaffected.
+// 21: pixel deduplication and multi-pixel loop fix: groups SDK loaders in <head>,
+//     uses trackSingle for Meta, calls ttq.track once for TikTok to prevent
+//     broadcast request storms (e.g. 17x17 Meta calls) and browser freezing.
+export const COMPILER_VERSION = 21;
 
 /**
  * Block types the compiler can render, derived from the renderer registry.
@@ -130,9 +148,10 @@ export function cacheStats(): { entries: number; bytes: number } {
 }
 
 function blocksOf(customStructure: any): any[] {
-  // Two shapes exist in the wild: a bare array (legacy) and { blocks, settings }.
-  if (Array.isArray(customStructure)) return customStructure;
-  return customStructure?.blocks || [];
+  // Three shapes exist: a bare array, { blocks, settings }, and the version 3
+  // tree. The shared reader flattens all of them to the block list the rest
+  // of this file reasons about.
+  return flatBlocks(customStructure);
 }
 
 function cloakingOf(customStructure: any): any | null {
@@ -179,7 +198,11 @@ async function loadLink(code: string): Promise<any | null> {
  */
 export async function compileLanding(link: any): Promise<{ html: Buffer; csp: string } | null> {
   const structure = link?.landingPage?.customStructure;
-  const blocks = blocksOf(structure);
+  // Theme tokens ($primary, $text, ...) resolve here, at the last moment
+  // before rendering, against the page's own theme colour. The stored page
+  // keeps its tokens; only the compiled bytes carry literals.
+  const theme = themeFromLandingPage(link?.landingPage);
+  const blocks = resolveBlocks(blocksOf(structure), theme);
 
   if (!blocks.length) return null;
   if (unsupportedBlocks(structure).length) return null;
@@ -187,6 +210,9 @@ export async function compileLanding(link: any): Promise<{ html: Buffer; csp: st
   const rendered = await renderDocument({
     code: link.code,
     blocks,
+    // A tree with real structure renders its sections and layouts; a flat
+    // page, or a tree that is still flat underneath, takes the old path.
+    document: isDocument(structure) ? resolveDocument(structure, theme) : undefined,
     settings: Array.isArray(structure) ? {} : structure?.settings || {},
     landingPage: link.landingPage,
     product: link.product,

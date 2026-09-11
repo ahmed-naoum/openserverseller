@@ -340,6 +340,28 @@ async function testTts(model: TestableModel, adminId: number): Promise<Partial<M
  * what the vendor said" — so it is caught and shaped into the same result the
  * success path returns. A test button that 500s tells the admin nothing.
  */
+/**
+ * The builder role reads a store brief and fills the design_store tool. The
+ * probe is a brief with a niche, a background colour, a brand colour and one
+ * dropped section, so each of those readings can be checked on the answer.
+ */
+async function testBuilder(model: TestableModel): Promise<Partial<ModelTestResult>> {
+  const { interpretBrief, getBuilderSettings } = await import('../services/designBrain.service.js');
+  const settings = { ...(await getBuilderSettings()), enabled: true, writeCopy: true };
+  const brief = 'Boutique de chaussures de sport, fond noir, boutons rouges, avec avis clients, sans FAQ';
+  const result = await interpretBrief({ prompt: brief, storeName: 'Test', settings, model: model as any });
+  const spec = result.spec;
+  const checks: ModelTestCheck[] = [
+    { label: 'Le modèle a rempli l’outil design_store', ok: Boolean(spec), detail: spec ? null : result.engine.note },
+    { label: 'Niche lue : mode & accessoires', ok: spec?.niche === 'fashion', detail: spec?.niche ?? null },
+    { label: 'Fond noir lu comme couleur de fond', ok: Boolean(spec?.colours?.bg), detail: spec?.colours?.bg ?? null },
+    { label: 'Boutons rouges lus comme couleur principale', ok: Boolean(spec?.colours?.primary), detail: spec?.colours?.primary ?? null },
+    { label: 'FAQ retirée', ok: Boolean(spec?.drops?.includes('faq')), detail: spec?.drops?.join(', ') ?? null },
+    { label: 'Textes rédigés', ok: Boolean(spec?.copy?.headline), detail: spec?.copy?.headline ?? null },
+  ];
+  return { checks, sample: spec ? JSON.stringify({ niche: spec.niche, mood: spec.mood, colours: spec.colours, wants: spec.wants, drops: spec.drops, headline: spec.copy?.headline, summary: spec.summary }, null, 2) : null, error: spec ? null : result.engine.note };
+}
+
 export async function testModel(model: TestableModel, adminId: number): Promise<ModelTestResult> {
   const startedAt = Date.now();
 
@@ -382,6 +404,9 @@ export async function testModel(model: TestableModel, adminId: number): Promise<
         break;
       case 'TTS':
         outcome = await testTts(model, adminId);
+        break;
+      case 'BUILDER':
+        outcome = await testBuilder(model);
         break;
       default:
         // Reached only by a legacy row whose role the catalogue no longer

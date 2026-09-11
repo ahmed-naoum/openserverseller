@@ -4,6 +4,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { authApi } from '../../lib/api';
 import CustomDomainPanel from '../../components/vendor/CustomDomainPanel';
+import PageHeader from '../../components/common/PageHeader';
 import toast from 'react-hot-toast';
 
 export default function Domains() {
@@ -79,15 +80,11 @@ export default function Domains() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="p-3 bg-primary-100 text-primary-600 rounded-xl">
-          <Globe size={28} />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('domain_integration_title', 'dashboard') || 'Intégration de Domaine'}</h1>
-          <p className="text-gray-500">{t('domain_integration_desc', 'dashboard') || 'Gérez vos liens avec un sous-domaine gratuit ou votre propre domaine personnalisé.'}</p>
-        </div>
-      </div>
+      <PageHeader
+        icon={Globe}
+        title={t('domain_integration_title', 'dashboard') || 'Intégration de Domaine'}
+        subtitle={t('domain_integration_desc', 'dashboard') || 'Gérez vos liens avec un sous-domaine gratuit ou votre propre domaine personnalisé.'}
+      />
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="flex border-b border-gray-200">

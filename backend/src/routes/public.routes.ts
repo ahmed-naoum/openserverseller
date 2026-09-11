@@ -8,6 +8,7 @@ import path from 'path';
 import { validateInfluencerSubdomain } from '../utils/subdomain.js';
 import { getClientIp, getClientCountry } from '../utils/clientIp.js';
 import { maybeAutoBanForOrders } from '../lib/ipBan.js';
+import { findVendorBan, recordVendorBanHit } from '../lib/vendorIpBan.js';
 import { getIO } from '../lib/realtime.js';
 import { getNotifiableAgentIds } from '../utils/agentScope.js';
 import { enqueueSheetPush } from '../services/sheetPush.service.js';
@@ -369,6 +370,125 @@ const sanitizeSourceUrl = (value: unknown): string | null => {
   }
 };
 
+/**
+ * Abandoned-checkout capture for compiled landing pages.
+ *
+ * The React page streams what the visitor types over its socket
+ * (ReferralForm.tsx:194 -> index.ts:625) and that stream is what fills the
+ * call-centre's abandoned-carts queue. A compiled page has no socket — adding
+ * one would put socket.io and an open connection on every visitor, undoing the
+ * page weight the compiler exists to remove — so its runtime posts the same
+ * four fields here instead, on the same debounce.
+ *
+ * Public and unauthenticated for the same reason `/geo` is: landing pages run
+ * on vendor custom domains with no session.
+ *
+ * Deliberately does NOT resolve the referral code. `/leads` can afford that
+ * lookup once per order; this runs while a finger is on the keyboard, and the
+ * carts list already scopes by joining `referralCode` against the links an
+ * agent may see, so a code that matches no link simply never surfaces.
+ */
+const checkoutProgressLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  // A visitor filling the form honestly produces a handful of these: the
+  // debounce coalesces typing, and identical payloads are dropped in the
+  // browser. The allowance is for the carrier NATs most Moroccan mobile
+  // traffic arrives behind, not for one busy typist.
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => clientIp(req) || 'unknown',
+  // No body: nothing is waiting on the answer, and a refused beacon must cost
+  // the visitor nothing.
+  handler: (_req, res) => {
+    res.status(429).end();
+  },
+});
+
+/** The shape runtime/checkout.ts mints. Namespaced so it can never collide
+ *  with a socket.id, which is what the React path keys the same table on. */
+const CHECKOUT_SID = /^ck_[A-Za-z0-9]{8,64}$/;
+
+const sanitizeCheckoutField = (value: unknown, maxLength: number): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().slice(0, maxLength);
+  return trimmed || null;
+};
+
+router.post(
+  '/checkout-progress',
+  checkoutProgressLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    // Everything below answers 204 whatever happens. This is fire-and-forget
+    // telemetry about someone who has not ordered yet; there is no failure mode
+    // worth spending a byte of the customer's connection on.
+    const sid = typeof req.body?.sid === 'string' ? req.body.sid.trim() : '';
+    if (!CHECKOUT_SID.test(sid)) return res.status(204).end();
+
+    const f = req.body?.fields || {};
+    // Caps match the maxlength the checkout block renders, with headroom.
+    const fullName = sanitizeCheckoutField(f.fullName, 120);
+    const phone = sanitizeCheckoutField(f.phone, 40);
+    const city = sanitizeCheckoutField(f.city, 80);
+    const address = sanitizeCheckoutField(f.address, 400);
+
+    const present = [fullName, phone, city, address].filter(Boolean).length;
+    if (present === 0) return res.status(204).end();
+
+    // How many of the four this visitor has filled at any point, which after a
+    // reload is more than the payload carries: the runtime remembers the field
+    // NAMES across a reload while their values live only in the row here. Never
+    // below what this request proves, and never above four.
+    const claimed = typeof req.body?.filled === 'number' && Number.isInteger(req.body.filled)
+      ? req.body.filled
+      : 0;
+    const filled = Math.min(4, Math.max(present, claimed));
+
+    const referralCode = sanitizeCheckoutField(req.body?.code, 128);
+    const productName = sanitizeCheckoutField(req.body?.productName, 200);
+    const path = sanitizeCheckoutField(req.body?.path, 300);
+
+    try {
+      await prisma.checkoutAttempt.upsert({
+        where: { sessionId: sid },
+        create: {
+          sessionId: sid,
+          referralCode,
+          productName,
+          ip: getClientIp(req),
+          userAgent: (req.headers['user-agent'] || '').toString().slice(0, 500) || null,
+          path,
+          fullName,
+          phone,
+          city,
+          address,
+          fieldsFilled: filled,
+          completed: false,
+        },
+        update: {
+          referralCode: referralCode ?? undefined,
+          productName: productName ?? undefined,
+          // `undefined`, never `null`: an empty field leaves the stored one
+          // alone. That is the sticky merge the socket handler keeps in memory
+          // per connection — expressed as an omitted column, it survives a
+          // reload and costs no read before the write.
+          fullName: fullName ?? undefined,
+          phone: phone ?? undefined,
+          city: city ?? undefined,
+          address: address ?? undefined,
+          fieldsFilled: filled,
+          // `completed` is untouched on purpose. A beacon still in flight when
+          // the order lands must not reopen a cart that was just closed.
+        },
+      });
+    } catch (err) {
+      console.error('[Checkout] progress upsert failed:', err);
+    }
+
+    return res.status(204).end();
+  })
+);
+
 router.post(
   '/leads',
   orderRateLimiter,
@@ -427,6 +547,18 @@ router.post(
     const ipCountry = getClientCountry(req, ipAddress);
     const userAgent = (req.headers['user-agent'] || '').toString().slice(0, 500) || null;
 
+    // The seller's own blocklist, raised from their leads screen. Narrower than
+    // the global ban in ipFilter, which never got this far: this one only
+    // refuses orders on this vendor's pages, so the same visitor can still buy
+    // from everyone else. 404, not 403 — every other rejection on this endpoint
+    // is a 404 and a distinguishable status would tell a fraudster they are
+    // banned and to come back from somewhere else.
+    const vendorBan = await findVendorBan(vendorId, ipAddress);
+    if (vendorBan) {
+      recordVendorBanHit(vendorBan.id);
+      throw new AppException(404, 'Referral link or product not found or inactive');
+    }
+
     // Create the lead for the vendor
     const lead = await prisma.lead.create({
       data: {
@@ -446,6 +578,24 @@ router.post(
         notes: null
       }
     });
+
+    // Close the abandoned cart this order grew out of, so a checkout that
+    // completed never reaches the call-centre's recovery queue. The compiled
+    // page carries the id on the order itself rather than sending a second
+    // beacon, which would be racing the redirect to the thank-you page; the
+    // React page still does this over its socket ('checkout:complete').
+    // Best-effort, like every hook below it: the lead is already saved.
+    const checkoutSessionId = sanitizeVariantText(req.body.checkoutSessionId, 80);
+    if (checkoutSessionId) {
+      try {
+        await prisma.checkoutAttempt.updateMany({
+          where: { sessionId: checkoutSessionId },
+          data: { completed: true },
+        });
+      } catch (err) {
+        console.error('[Checkout] failed to close attempt:', err);
+      }
+    }
 
     // Auto-ban an address that keeps placing orders. The rate limiter above
     // already refuses the extra orders, but it forgets after 24h and the same
@@ -684,10 +834,8 @@ router.get(
     if (req.user?.uuid) {
       isBlocked = pageBlocks.has(`${req.user.uuid}-${path}`);
       if (!isBlocked && path !== '*') isBlocked = pageBlocks.has(`${req.user.uuid}-*`);
-    }
-
-    // Fallback to IP-based checks
-    if (!isBlocked) {
+    } else {
+      // Fallback to IP-based checks ONLY for unauthenticated / guest visitors
       isBlocked = pageBlocks.has(`${ip}-${path}`);
       if (!isBlocked && path !== '*') isBlocked = pageBlocks.has(`${ip}-*`);
     }

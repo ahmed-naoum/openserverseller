@@ -32,6 +32,13 @@ export interface BlockContext {
   code: string;
   /** Product retail price, the last fallback in the price precedence chain. */
   productPriceMad: number | null;
+  /**
+   * Product display name, for labelling an abandoned cart in the call-centre
+   * list. Resolved at compile time rather than looked up per beacon: the
+   * capture endpoint is on the typing path and must not touch the database
+   * more than the single upsert it exists for.
+   */
+  productName: string | null;
   /** Pixels active for this link, for firing a conversion on submit. */
   pixels: ConversionPixel[];
   /** landingPage.buttonText — the middle tier of the submit-button label chain. */

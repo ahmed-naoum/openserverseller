@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import BuilderAiPanel from './BuilderAiPanel';
 import {
   AlertTriangle,
   Bot,
@@ -77,12 +78,13 @@ type CapabilityKey =
   | 'supportsMidSystem'
   | 'supportsFallbacks';
 
-const ROLE_ORDER: ModelRole[] = ['BRAIN', 'STT', 'TTS'];
+const ROLE_ORDER: ModelRole[] = ['BRAIN', 'STT', 'TTS', 'BUILDER'];
 
 const ROLE_META: Record<ModelRole, { label: string; icon: LucideIcon; tone: string }> = {
   BRAIN: { label: 'Cerveau (rédige les réponses)', icon: Brain, tone: 'bg-indigo-50 text-indigo-600' },
   STT: { label: 'Transcription (notes vocales)', icon: Mic, tone: 'bg-emerald-50 text-emerald-600' },
   TTS: { label: 'Voix (réponses vocales)', icon: Volume2, tone: 'bg-amber-50 text-amber-600' },
+  BUILDER: { label: 'Constructeur de boutique (lit les descriptions OpenDesign)', icon: Sparkles, tone: 'bg-violet-50 text-violet-600' },
 };
 
 /**
@@ -168,6 +170,8 @@ const TEST_HELP: Record<string, string> = {
     'Fait lire une phrase par ce moteur, sans repli ni relance, et rend le fichier audio à écouter. Facturé par le fournisseur.',
   VISION:
     'Montre une image de couleur unie au modèle et vérifie qu’il la décrit correctement. Facturé par le fournisseur.',
+  BUILDER:
+    'Fait lire une description de boutique au modèle (niche, fond noir, boutons rouges, sans FAQ) et vérifie chaque lecture, puis que des textes ont été rédigés. Facturé par le fournisseur.',
 };
 
 const VOICE_PROVIDER_LABEL: Record<string, string> = {
@@ -1140,6 +1144,8 @@ export default function AiModelsPage() {
               Ajouter un modèle
             </button>
           </div>
+
+          <BuilderAiPanel />
 
           {roles.map((role) => {
             const meta = ROLE_META[role] ?? {

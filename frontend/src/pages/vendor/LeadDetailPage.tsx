@@ -2,6 +2,7 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { leadsApi } from '../../lib/api';
 import { formatCurrency, formatDate, formatPhone, getStatusColor } from '../../utils';
+import LeadCartPanel from '../../components/leads/LeadCartPanel';
 
 export default function LeadDetailPage() {
   const { id } = useParams();
@@ -51,6 +52,9 @@ export default function LeadDetailPage() {
           {data.status}
         </span>
       </div>
+
+      {/* Nothing else on this page says what a store customer ordered. */}
+      <LeadCartPanel lead={data} />
 
       <div className="grid md:grid-cols-3 gap-6">
         {/* Contact Info */}

@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
 import LanguageSwitcherWidget from '../../components/common/LanguageSwitcherWidget';
 import CguModal from '../../components/auth/CguModal';
+import StoreNameField, { finalizeStoreName, localStoreNameError, type StoreNameStatus } from '../../components/auth/StoreNameField';
 
 const normalizePhone = (phone: string): string => {
   if (!phone) return '';
@@ -37,6 +38,16 @@ const translations = {
     phone_invalid: "Format de téléphone marocain invalide",
     name_required: "Nom complet requis",
     phone_required: "Téléphone requis",
+    store_name_label: "Nom de votre boutique",
+    store_name_placeholder: "ma-boutique",
+    store_name_hint: "Votre boutique sera créée automatiquement sur cette adresse. Vous pourrez la modifier plus tard.",
+    store_name_required: "Le nom de la boutique est requis",
+    store_name_length: "Entre 3 et 30 caractères",
+    store_name_invalid: "Lettres minuscules, chiffres et tirets uniquement",
+    store_name_available: "Disponible !",
+    store_name_taken: "Ce nom est déjà pris",
+    store_name_reserved: "Ce nom est réservé",
+    store_name_blocked: "Ce nom contient un mot interdit",
   },
   ar: {
     title: "إكمال عملية التسجيل",
@@ -56,6 +67,16 @@ const translations = {
     phone_invalid: "رقم هاتف مغربي غير صحيح",
     name_required: "الاسم الكامل مطلوب",
     phone_required: "رقم الهاتف مطلوب",
+    store_name_label: "اسم متجرك",
+    store_name_placeholder: "my-store",
+    store_name_hint: "سيتم إنشاء متجرك تلقائياً على هذا العنوان. يمكنك تغييره لاحقاً.",
+    store_name_required: "اسم المتجر مطلوب",
+    store_name_length: "بين 3 و 30 حرفاً",
+    store_name_invalid: "أحرف إنجليزية صغيرة وأرقام وشرطات فقط",
+    store_name_available: "متاح!",
+    store_name_taken: "هذا الاسم مستخدم بالفعل",
+    store_name_reserved: "هذا الاسم محجوز",
+    store_name_blocked: "هذا الاسم يحتوي على كلمة ممنوعة",
   },
   en: {
     title: "Complete Registration",
@@ -75,6 +96,16 @@ const translations = {
     phone_invalid: "Invalid Moroccan phone format",
     name_required: "Full name is required",
     phone_required: "Phone is required",
+    store_name_label: "Your store name",
+    store_name_placeholder: "my-store",
+    store_name_hint: "Your store is created automatically at this address. You can change it later.",
+    store_name_required: "Store name is required",
+    store_name_length: "Between 3 and 30 characters",
+    store_name_invalid: "Lowercase letters, numbers and hyphens only",
+    store_name_available: "Available!",
+    store_name_taken: "This name is already taken",
+    store_name_reserved: "This name is reserved",
+    store_name_blocked: "This name contains a forbidden word",
   }
 };
 
@@ -112,6 +143,8 @@ export default function CompleteRegisterGoogle() {
   const [role, setRole] = useState<'VENDOR' | 'INFLUENCER'>(stateData?.role || 'VENDOR');
   const [fullName, setFullName] = useState(stateData?.fullName || '');
   const [phone, setPhone] = useState('');
+  const [storeName, setStoreName] = useState('');
+  const [storeNameStatus, setStoreNameStatus] = useState<StoreNameStatus>('idle');
   const [cguAccepted, setCguAccepted] = useState(false);
   const [showCguModal, setShowCguModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -176,6 +209,17 @@ export default function CompleteRegisterGoogle() {
       return;
     }
 
+    const storeNameError = localStoreNameError(storeName);
+    if (storeNameError) {
+      toast.error(t(storeNameError));
+      return;
+    }
+
+    if (storeNameStatus === 'taken') {
+      toast.error(t('store_name_taken'));
+      return;
+    }
+
     if (role === 'INFLUENCER') {
       const { instagramUsername, tiktokUsername, facebookUsername, youtubeUsername, snapchatUsername } = socials;
       if (!instagramUsername && !tiktokUsername && !facebookUsername && !youtubeUsername && !snapchatUsername) {
@@ -196,6 +240,7 @@ export default function CompleteRegisterGoogle() {
         role,
         phone,
         fullName,
+        storeName: finalizeStoreName(storeName),
         instagramUsername: socials.instagramUsername || undefined,
         instagramUrl: socials.instagramUrl || (socials.instagramUsername ? `https://instagram.com/${socials.instagramUsername}` : undefined),
         tiktokUsername: socials.tiktokUsername || undefined,
@@ -303,6 +348,18 @@ export default function CompleteRegisterGoogle() {
 
           <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Store name — the subdomain the storefront is provisioned on */}
+              <StoreNameField
+                value={storeName}
+                onChange={setStoreName}
+                onStatusChange={setStoreNameStatus}
+                label={t('store_name_label')}
+                placeholder={t('store_name_placeholder')}
+                hint={t('store_name_hint')}
+                t={t}
+                rtl={language === 'ar'}
+              />
+
               {/* Full Name */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 flex justify-between">

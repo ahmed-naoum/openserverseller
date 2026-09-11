@@ -17,11 +17,92 @@
  * is odd the comment says so rather than the code fixing it: a rendering rewrite
  * and a behaviour change landing together would make any movement in conversion
  * impossible to attribute.
+ *
+ * NOTE ON COMMENTS: everything between the backticks is downloaded by every
+ * visitor — there is no minifier in this pipeline. Explanation belongs up here,
+ * where it costs nothing, and the string keeps only what a reader needs while
+ * looking at the line itself.
+ *
+ * ── Abandoned-checkout capture (the `ck` functions) ───────────────────────
+ *
+ * The React page streams every keystroke to the server over its socket
+ * (ReferralForm.tsx:194 -> index.ts:625) and that stream is the only thing that
+ * fills the call-centre's abandoned-carts queue. A compiled page has no socket
+ * and must not grow one: socket.io is a second script plus an open connection
+ * for every visitor, which is the page weight this compiler exists to remove.
+ * The same four fields go out over the same 700ms debounce as one small POST
+ * instead, and nothing is sent until the visitor actually types — a bounce
+ * still costs zero requests.
+ *
+ * Identity: the socket handler keyed the row on socket.id, so this mints its
+ * own `ck_` id. One per TAB, shared by every checkout block on the page — a
+ * visitor is one cart however many forms the page renders — and held in
+ * sessionStorage so a pull-to-refresh keeps writing to the same row instead of
+ * opening a second, emptier-looking cart.
+ *
+ * Merge: the server leaves a stored column alone when a field arrives empty,
+ * which is the sticky merge the socket handler kept in memory per connection —
+ * a number typed and then cleared is still the best contact we have. That is
+ * also what lets the endpoint answer with a single write and no read on the
+ * typing path.
+ *
+ * Completeness: `ck_fld` holds the NAMES of the fields filled so far, never the
+ * values. After a reload the form is empty but the row is not, so without it
+ * the "3/4 champs" an agent sorts the recovery queue by would drop back to
+ * whatever happened to get retyped.
+ *
+ * Flush: `pagehide` covers the close, the back button and the bfcache;
+ * `visibilitychange` covers a phone being locked or the app switched away from,
+ * which on mobile is where most of these carts actually end. Both send with
+ * `keepalive`, the one thing that lets a request outlive the unload that made
+ * the cart abandoned in the first place.
  */
 export const CHECKOUT_RUNTIME = `
 (function(){
   var roots = document.querySelectorAll('[data-ck-root]');
   for (var r = 0; r < roots.length; r++) init(roots[r]);
+
+  // Abandoned-checkout capture. Rationale in the docblock above.
+  var SID_KEY = 'ck_sid';
+  var sidValue = null;
+
+  function newSid() {
+    try {
+      if (window.crypto && window.crypto.randomUUID) {
+        return 'ck_' + window.crypto.randomUUID().replace(/-/g, '');
+      }
+    } catch (e) {}
+    return 'ck_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+
+  // Field NAMES filled so far, never their values.
+  var FILLED_KEY = 'ck_fld';
+
+  function filledKeys() {
+    try {
+      var raw = sessionStorage.getItem(FILLED_KEY);
+      return raw ? raw.split(',') : [];
+    } catch (e) { return []; }
+  }
+
+  function rememberFilled(keys) {
+    try { sessionStorage.setItem(FILLED_KEY, keys.join(',')); } catch (e) {}
+  }
+
+  function sid() {
+    if (sidValue) return sidValue;
+    try {
+      sidValue = sessionStorage.getItem(SID_KEY);
+      if (!sidValue) {
+        sidValue = newSid();
+        sessionStorage.setItem(SID_KEY, sidValue);
+      }
+    } catch (e) {
+      // Private mode: a per-load id still captures the cart.
+      sidValue = newSid();
+    }
+    return sidValue;
+  }
 
   function init(root) {
     var cfgEl = root.querySelector('script[type="application/json"]');
@@ -38,6 +119,7 @@ export const CHECKOUT_RUNTIME = `
       city: root.querySelector('[data-ck="city"]'),
       address: root.querySelector('[data-ck="address"]')
     };
+    var FIELDS = ['fullName', 'phone', 'city', 'address'];
     var btn = root.querySelector('[data-ck="submit"]');
     var strip = root.querySelector('[data-ck="strip"]');
     var panel = root.querySelector('[data-ck="success"]');
@@ -233,6 +315,80 @@ export const CHECKOUT_RUNTIME = `
       });
     });
 
+    // The beacon. Mirrors the socket handler's contract (index.ts:625).
+    var ckTimer = null;
+    var ckLast = '';
+    var ckDone = false;
+    var ckSticky = { fullName: '', phone: '', city: '', address: '' };
+
+    function ckSnapshot() {
+      var out = null;
+      // Seeded from the tab, so a field filled before a reload still counts.
+      var known = filledKeys();
+      FIELDS.forEach(function(k){
+        var v = f[k] ? (f[k].value || '').trim() : '';
+        if (v) ckSticky[k] = v;
+        if (!ckSticky[k]) return;
+        if (known.indexOf(k) < 0) known.push(k);
+        if (!out) out = { fields: {}, filled: 0 };
+        out.fields[k] = ckSticky[k];
+      });
+      if (!out) return null;
+      rememberFilled(known);
+      out.filled = known.length;
+      return out;
+    }
+
+    function ckSend(keepalive) {
+      if (ckTimer) { clearTimeout(ckTimer); ckTimer = null; }
+      // Once the order exists the lead itself carries the data.
+      if (ckDone) return;
+      var snap = ckSnapshot();
+      if (!snap) return;
+
+      var body = JSON.stringify({
+        sid: sid(),
+        code: cfg.code,
+        productName: cfg.productName || undefined,
+        path: location.pathname,
+        fields: snap.fields,
+        filled: snap.filled
+      });
+      // Deduped on the payload: a blur after the debounce would repost it.
+      if (body === ckLast) return;
+      ckLast = body;
+
+      try {
+        fetch('/api/v1/public/checkout-progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body,
+          // Lets the flush below outlive the unload.
+          keepalive: !!keepalive
+        }).catch(function(){});
+      } catch (e) {}
+    }
+
+    function ckSchedule() {
+      if (ckDone) return;
+      if (ckTimer) clearTimeout(ckTimer);
+      ckTimer = setTimeout(function(){ ckTimer = null; ckSend(false); }, 700);
+    }
+
+    FIELDS.forEach(function(k){
+      if (!f[k]) return;
+      f[k].addEventListener('input', ckSchedule);
+      // Leaving a field beats the debounce when the visitor then walks away.
+      f[k].addEventListener('blur', function(){ ckSend(false); });
+    });
+
+    // The moment the cart becomes abandoned: close, back, bfcache, or a
+    // phone being locked (which on mobile is where most of them end).
+    window.addEventListener('pagehide', function(){ ckSend(true); });
+    document.addEventListener('visibilitychange', function(){
+      if (document.visibilityState === 'hidden') ckSend(true);
+    });
+
     function slotFor(el) {
       return el && el.parentNode ? el.parentNode.querySelector('[data-ck-err]') : null;
     }
@@ -354,23 +510,53 @@ export const CHECKOUT_RUNTIME = `
     }
 
     function track(eventId) {
-      if (!cfg.pixels) return;
+      if (!cfg.pixels || !cfg.pixels.length) return;
       var val = capiValue();
+      var metaData = val !== null ? { value: val, currency: 'MAD' } : {};
+      var metaOpts = eventId ? { eventID: eventId } : undefined;
+
+      var hasTikTok = false;
+      var hasSnap = false;
+      var hasGoogle = false;
+      var tiktokEvent = 'CompletePayment';
+      var snapEvent = 'PURCHASE';
+
       for (var i = 0; i < cfg.pixels.length; i++) {
         var p = cfg.pixels[i];
         var ev = p.conversionEvent || 'Purchase';
         try {
           if (p.platform === 'META' && window.fbq) {
-            window.fbq('track', ev,
-              val !== null ? { value: val, currency: 'MAD' } : {},
-              eventId ? { eventID: eventId } : undefined);
-          } else if (p.platform === 'GOOGLE' && window.gtag) {
-            window.gtag('event', ev, { 'event_category': 'conversion' });
-          } else if (p.platform === 'TIKTOK' && window.ttq) {
-            window.ttq.track(ev === 'Purchase' ? 'CompletePayment' : 'CompleteRegistration');
-          } else if (p.platform === 'SNAPCHAT' && window.snaptr) {
-            window.snaptr('track', ev === 'Purchase' ? 'PURCHASE' : 'SIGN_UP');
+            if (p.pixelId) {
+              window.fbq('trackSingle', p.pixelId, ev, metaData, metaOpts);
+            } else {
+              window.fbq('track', ev, metaData, metaOpts);
+            }
+          } else if (p.platform === 'GOOGLE') {
+            hasGoogle = true;
+          } else if (p.platform === 'TIKTOK') {
+            hasTikTok = true;
+            if (ev !== 'Purchase') tiktokEvent = 'CompleteRegistration';
+          } else if (p.platform === 'SNAPCHAT') {
+            hasSnap = true;
+            if (ev !== 'Purchase') snapEvent = 'SIGN_UP';
           }
+        } catch (e) {}
+      }
+
+      if (hasTikTok && window.ttq) {
+        try {
+          var ttPayload = val !== null ? { value: val, currency: 'MAD' } : {};
+          window.ttq.track(tiktokEvent, ttPayload, eventId ? { event_id: eventId } : undefined);
+        } catch (e) {}
+      }
+      if (hasSnap && window.snaptr) {
+        try {
+          window.snaptr('track', snapEvent, val !== null ? { price: val, currency: 'MAD' } : undefined);
+        } catch (e) {}
+      }
+      if (hasGoogle && window.gtag) {
+        try {
+          window.gtag('event', 'conversion', { 'event_category': 'conversion', 'value': val });
         } catch (e) {}
       }
     }
@@ -395,8 +581,11 @@ export const CHECKOUT_RUNTIME = `
       return n >= 1 ? Math.floor(n) : 1;
     }
 
+    var isSubmitting = false;
+
     form.addEventListener('submit', function(e){
       e.preventDefault();
+      if (isSubmitting) return;
       // From here on the whole form validates live on every keystroke — the
       // customer has asked for a verdict once, so keeping the verdict current
       // beats staying quiet.
@@ -435,6 +624,7 @@ export const CHECKOUT_RUNTIME = `
         return;
       }
 
+      isSubmitting = true;
       btn.disabled = true;
       var label = btn.textContent;
       btn.textContent = cfg.msg.sending;
@@ -470,7 +660,10 @@ export const CHECKOUT_RUNTIME = `
           fbp: readCookie('_fbp') || undefined,
           fbc: fbcValue() || undefined,
           value: orderValue !== null ? orderValue : undefined,
-          eventSourceUrl: location.href
+          eventSourceUrl: location.href,
+          // Closes this visitor's abandoned cart. Carried on the order rather
+          // than sent as its own beacon, which would race the redirect below.
+          checkoutSessionId: sid()
         })
       }).then(function(res){
         // A 502 from nginx or an offline network yields a non-JSON body; without
@@ -484,6 +677,7 @@ export const CHECKOUT_RUNTIME = `
           e2.fromServer = true;
           throw e2;
         }
+        ckDone = true;
         track(capiEventId);
 
         // Confirm immediately, then navigate. The panel is only on screen for a
@@ -505,6 +699,7 @@ export const CHECKOUT_RUNTIME = `
           location.replace(cfg.thankYouUrl || '/thank-you');
         }, cfg.thankYouDelayMs);
       }).catch(function(err){
+        isSubmitting = false;
         // Only a message the server actually sent is safe to show; anything else
         // is a browser-internal string the customer cannot act on.
         topError(err && err.fromServer && err.message ? err.message : cfg.msg.failed);

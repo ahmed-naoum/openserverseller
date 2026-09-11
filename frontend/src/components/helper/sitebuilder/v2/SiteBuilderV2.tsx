@@ -14,6 +14,7 @@ import { DEMO_SHOWCASE_TEMPLATE } from './templates';
 import { buildReferralUrl } from '../../../../utils/referral';
 import { Loader2, Layers, PlusCircle, Settings2, Sparkles, ArrowLeft, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { defaultsFor } from '@shared/blocks/index.js';
 
 interface SiteBuilderV2Props {
   initialBlocks?: EditorBlock[];
@@ -140,6 +141,10 @@ export default function SiteBuilderV2({
       const updated = [...prev];
       if (typeof targetIndex === 'number' && targetIndex >= 0 && targetIndex <= updated.length) {
         updated.splice(targetIndex, 0, newBlock);
+      } else if (type == "site_header") {
+        // A header appended to the bottom of the page is not a header. An
+        // explicit drop position still wins — the branch above.
+        updated.unshift(newBlock);
       } else {
         updated.push(newBlock);
       }
@@ -384,107 +389,14 @@ export default function SiteBuilderV2({
 }
 
 function getDefaultBlockContent(type: BlockType, ownerId?: number | null): any {
-  switch (type) {
-    case 'header':
-      return { text: 'MON ENTREPRISE', bgColor: '#0f172a', color: '#ffffff', paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
-    case 'hero':
-      return { title: 'Offre Spéciale !', subtitle: 'Découvrez notre produit exclusif.', bgColor: '#ffffff', titleColor: '#0f172a', subtitleColor: '#475569', paddingTop: 40, paddingBottom: 32, marginTop: 0, marginBottom: 16 };
-    case 'image':
-      return { url: '', height: 500, width: 100, paddingTop: 0, paddingBottom: 0, marginTop: 0, marginBottom: 0 };
-    case 'text':
-      return { text: 'Nouveau paragraphe de description.', isHeading: false, color: '#334155', align: 'left', verticalAlign: 'center', paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
-    case 'button':
-      return { text: 'COMMANDER MAINTENANT', bgColor: '#ea580c', textColor: '#ffffff', textSize: 16, buttonBorderRadius: 16, buttonPaddingY: 16, buttonPaddingX: 32, link: '', behavior: 'checkout', stickyMobile: false, stickyDesktop: false, animationLayout: 'none', paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
-    case 'countdown':
-      return { text: "🔥 L'offre flash expire bientôt !", paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 8 };
-    case 'whatsapp':
-      return { enableWidget: true, phoneNumber: '', headline: "Discutons sur WhatsApp", nickname: 'Service Client', welcomeMessage: 'Bonjour ! Comment pouvons-nous vous aider ?', headerBg: '#25D366', iconStyle: 'bubble', iconType: 'whatsapp', position: 'bottom-right' };
-    case 'spacer':
-      return { height: 32 };
-    case 'slider':
-      return {
-        slides: [
-          { title: 'Bénéfice 1', description: 'Description de la première caractéristique clé.', mediaUrl: '' },
-          { title: 'Bénéfice 2', description: 'Description de la deuxième caractéristique clé.', mediaUrl: '' }
-        ],
-        cardsPerView: 1,
-        cardGap: 16,
-        autoPlay: true,
-        autoPlaySpeed: 4000,
-        showArrows: true,
-        showDots: true,
-        mediaHeight: 260,
-        titleColor: '#0f172a',
-        descColor: '#64748b',
-        cardBg: '#ffffff',
-        cardRadius: 20,
-        cardBorderWidth: 1,
-        cardBorderColor: '#e2e8f0',
-        cardShadow: 'md',
-        textAlign: 'center',
-        dotColor: '#ea580c',
-        paddingTop: 24,
-        paddingBottom: 24,
-        marginTop: 0,
-        marginBottom: 0
-      };
-    case 'products':
-      return { accountIds: ownerId ? [ownerId] : [], layoutType: 'grid', selectedProducts: [], gridCols: 3, cardBg: '#ffffff', cardRadius: 16, cardShadow: 'md', titleColor: '#0f172a', descColor: '#64748b', priceColor: '#ea580c', btnBg: '#ea580c', btnColor: '#ffffff', paddingTop: 32, paddingBottom: 32, marginTop: 0, marginBottom: 0 };
-    case 'express_checkout':
-      return {
-        title: 'اطلب الآن (الدفع عند الاستلام)',
-        subtitle: 'املأ النموذج أدناه لتأكيد طلبك. التوصيل مجاني والدفع عند الاستلام.',
-        buttonText: 'تأكيد الطلب',
-        themeColor: '#ea580c',
-        formBgColor: '#ffffff',
-        containerBgColor: '#ffffff',
-        nameLabel: 'الاسم الكامل *',
-        namePlaceholder: 'مثال: يوسف بن جلون',
-        phoneLabel: 'رقم الهاتف *',
-        phonePlaceholder: '06 XX XX XX XX',
-        cityLabel: 'المدينة *',
-        cityPlaceholder: 'مثال: الدار البيضاء',
-        addressLabel: 'العنوان (اختياري)',
-        addressPlaceholder: 'عنوانك الكامل لترهين التوصيل...',
-        borderRadiusTL: 16,
-        borderRadiusTR: 16,
-        borderRadiusBL: 16,
-        borderRadiusBR: 16,
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-        priceColor: '#ea580c',
-        priceSize: 32,
-        showPrice: true,
-        options: [],
-        packColor: '#ea580c',
-        packBorderWidth: 2,
-        packBorderRadius: 16,
-        paddingTop: 32,
-        paddingBottom: 32,
-        paddingLeft: 16,
-        paddingRight: 16,
-        marginTop: 0,
-        marginBottom: 0
-      };
-    case 'audio':
-      return {
-        themeStyle: 'whatsapp',
-        audios: [
-          { id: '1', title: 'Avis Client', senderName: 'Fatima (Casablanca) 🇲🇦', time: '11:42', url: '', avatarUrl: '' }
-        ],
-        bubbleColor: '#ffffff',
-        playBtnColor: '#25D366',
-        activeWaveColor: '#34B7F1',
-        showCheckmarks: true,
-        showSpeedToggle: true,
-        paddingTop: 16,
-        paddingBottom: 16,
-        marginTop: 0,
-        marginBottom: 0
-      };
-    case 'video':
-      return { url: '', redirectUrl: '', width: 100, autoplay: false, loop: false, muted: false, controls: true, showFullscreenBtn: true, paddingTop: 16, paddingBottom: 16, marginTop: 0, marginBottom: 0 };
-    default:
-      return {};
+  // Defaults live in the shared block registry, beside the schema each block
+  // is validated against, so this builder, the V1 builder and the compiler
+  // cannot disagree about what a fresh block carries.
+  const content = defaultsFor(type);
+  if (type === 'products' && ownerId) {
+    // The one default that depends on who is building: a product grid starts
+    // scoped to the owner's own catalogue.
+    (content as any).accountIds = [ownerId];
   }
+  return content;
 }

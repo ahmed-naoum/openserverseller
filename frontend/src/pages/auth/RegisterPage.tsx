@@ -12,12 +12,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
 import LanguageSwitcherWidget from '../../components/common/LanguageSwitcherWidget';
 import CguModal from '../../components/auth/CguModal';
+import StoreNameField, { finalizeStoreName, localStoreNameError, type StoreNameStatus } from '../../components/auth/StoreNameField';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 
 interface FormErrors {
   fullName?: string;
   email?: string;
   phone?: string;
+  storeName?: string;
   password?: string;
   confirmPassword?: string;
   instagramUsername?: string;
@@ -36,6 +38,8 @@ interface FormDataType {
   fullName: string;
   email: string;
   phone: string;
+  /** The subdomain the storefront answers on. Chosen here, provisioned on submit. */
+  storeName: string;
   password: string;
   confirmPassword: string;
   role: 'VENDOR' | 'INFLUENCER';
@@ -98,6 +102,10 @@ const validateField = (name: string, value: string, allValues?: FormDataType): s
       if (!value) return 'phone_required';
       if (!/^\+212[5678][0-9]{8}$/.test(value)) return 'phone_invalid';
       return undefined;
+    case 'storeName':
+      // Shape only. Availability lives in StoreNameField, which probes the API
+      // as the user types; the backend re-checks it on submit regardless.
+      return localStoreNameError(value) ?? undefined;
     case 'instagramUsername':
     case 'tiktokUsername':
     case 'facebookUsername':
@@ -152,6 +160,7 @@ export default function RegisterPage() {
     fullName: '',
     email: '',
     phone: '',
+    storeName: '',
     password: '',
     confirmPassword: '',
     role: defaultRole,
@@ -199,6 +208,9 @@ export default function RegisterPage() {
   // Bumping this remounts the widget for a manual retry.
   const [captchaKey, setCaptchaKey] = useState(0);
   const [selectionConfirmed, setSelectionConfirmed] = useState(false);
+  // Live verdict from the availability probe, so step 1 refuses to advance on a
+  // name the server has already told us is taken.
+  const [storeNameStatus, setStoreNameStatus] = useState<StoreNameStatus>('idle');
   const turnstileRef = useRef<TurnstileInstance>(null);
   const [googleCredential, setGoogleCredential] = useState<string | null>(null);
 
@@ -345,8 +357,8 @@ export default function RegisterPage() {
     // impossible with no visible error. Phone stays required — the backend
     // demands it and would otherwise loop back to needs_completion forever.
     const fieldsToValidate = googleCredential
-      ? ['fullName', 'email', 'phone']
-      : ['fullName', 'email', 'phone', 'password', 'confirmPassword'];
+      ? ['fullName', 'email', 'phone', 'storeName']
+      : ['fullName', 'email', 'phone', 'storeName', 'password', 'confirmPassword'];
     if (formData.role === 'INFLUENCER') {
         fieldsToValidate.push('instagramUsername', 'tiktokUsername', 'facebookUsername', 'youtubeUsername', 'snapchatUsername');
     }
@@ -367,6 +379,10 @@ export default function RegisterPage() {
         newErrors.phone = 'phone_required';
         isValid = false;
     }
+    if (storeNameStatus === 'taken') {
+        newErrors.storeName = 'store_name_taken';
+        isValid = false;
+    }
 
     if (formData.role === 'INFLUENCER' && !formData.instagramUsername && !formData.tiktokUsername && !formData.facebookUsername && !formData.youtubeUsername && !formData.snapchatUsername) {
         newErrors.instagramUsername = 'social_media_required';
@@ -375,7 +391,7 @@ export default function RegisterPage() {
 
     setErrors(newErrors);
     
-    const fieldsToTouch: Record<string, boolean> = { fullName: true, email: true, phone: true, password: true, confirmPassword: true };
+    const fieldsToTouch: Record<string, boolean> = { fullName: true, email: true, phone: true, storeName: true, password: true, confirmPassword: true };
     if (formData.role === 'INFLUENCER') {
         Object.assign(fieldsToTouch, { instagramUsername: true, tiktokUsername: true, facebookUsername: true, youtubeUsername: true, snapchatUsername: true });
     }
@@ -437,7 +453,7 @@ export default function RegisterPage() {
 
   /** Which wizard step a given field lives on, so we can send the user back to fix it. */
   const STEP_OF_FIELD: Record<string, number> = {
-    fullName: 1, email: 1, phone: 1,
+    storeName: 1, fullName: 1, email: 1, phone: 1,
     instagramUsername: 2, tiktokUsername: 2, facebookUsername: 2, youtubeUsername: 2, snapchatUsername: 2,
     password: 4, confirmPassword: 4,
   };
@@ -448,7 +464,7 @@ export default function RegisterPage() {
     let newTouched = { ...touched };
 
     if (step === 1) {
-      const fields = ['fullName', 'email', 'phone'];
+      const fields = ['storeName', 'fullName', 'email', 'phone'];
       fields.forEach(field => {
         const err = validateField(field, formData[field as keyof typeof formData] as string, formData);
         if (err) { newErrors[field as keyof FormErrors] = err; isValid = false; }
@@ -459,6 +475,11 @@ export default function RegisterPage() {
       }
       if (!formData.phone) {
         newErrors.phone = 'phone_required'; isValid = false;
+      }
+      // Let a name whose probe never answered through — the backend is the
+      // authority on availability and will reject it with a field error.
+      if (storeNameStatus === 'taken') {
+        newErrors.storeName = 'store_name_taken'; isValid = false;
       }
     } else if (step === 2) {
       if (formData.role === 'INFLUENCER') {
@@ -569,6 +590,7 @@ export default function RegisterPage() {
           role: formData.role,
           phone: formData.phone || undefined,
           fullName: formData.fullName,
+          storeName: finalizeStoreName(formData.storeName),
           instagramUsername: formData.instagramUsername || undefined,
           tiktokUsername: formData.tiktokUsername || undefined,
           facebookUsername: formData.facebookUsername || undefined,
@@ -627,6 +649,7 @@ export default function RegisterPage() {
               phone: formData.phone || undefined,
               password: formData.password,
               fullName: formData.fullName,
+              storeName: finalizeStoreName(formData.storeName),
               ref: refCode,
               instagramUsername: formData.instagramUsername || undefined,
               tiktokUsername: formData.tiktokUsername || undefined,
@@ -656,6 +679,7 @@ export default function RegisterPage() {
               phone: formData.phone || undefined,
               password: formData.password,
               fullName: formData.fullName,
+              storeName: finalizeStoreName(formData.storeName),
               role: 'VENDOR',
               ref: refCode,
               cguAccepted: true,
@@ -921,7 +945,24 @@ export default function RegisterPage() {
                 </div>
               
               {step === 1 && (
-                <>
+                <div className="space-y-4">
+                  <StoreNameField
+                    value={formData.storeName}
+                    onChange={(next) => {
+                      setFormData(prev => ({ ...prev, storeName: next }));
+                      // Any keystroke clears a stale server verdict ("already
+                      // taken") — the field re-probes on its own from here.
+                      setFieldError('storeName', undefined);
+                    }}
+                    onStatusChange={setStoreNameStatus}
+                    serverError={touched.storeName && errors.storeName ? t(errors.storeName) : null}
+                    label={t('store_name_label')}
+                    placeholder={t('store_name_placeholder')}
+                    hint={t('store_name_hint')}
+                    t={t}
+                    rtl={language === 'ar'}
+                  />
+
                   <div className="space-y-1.5">
                     <label className={`text-xs font-bold text-slate-700 flex justify-between ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>
                         <span>{t('full_name_label')} <span className="text-[#ff5722]">*</span></span>
@@ -943,53 +984,51 @@ export default function RegisterPage() {
                       />
                     </div>
                   </div>
- 
-                  <div className="space-y-4">
-                      <div className="space-y-1.5">
-                        <label className={`text-xs font-bold text-slate-700 flex justify-between ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>
-                            <span>{t('email_label')} <span className="text-[#ff5722]">*</span></span>
-                            {touched.email && errors.email && <span className="text-red-500 text-[10px] font-bold">{t(errors.email)}</span>}
-                        </label>
-                        <div className="relative group/input">
-                          <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`}>
-                            <Mail size={18} />
-                          </div>
-                          <input
-                            type="email"
-                            name="email"
-                            className={`w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-11 pl-4' : 'pl-11 pr-4'} transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400 ${touched.email && errors.email ? '!border-red-300 !ring-red-500/10' : ''}`}
-                            placeholder="votre@email.com"
-                            value={formData.email}
-                            onChange={handleChange}
-                            onBlur={handleBlur}
-                            required
-                          />
-                        </div>
+
+                  <div className="space-y-1.5">
+                    <label className={`text-xs font-bold text-slate-700 flex justify-between ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>
+                        <span>{t('email_label')} <span className="text-[#ff5722]">*</span></span>
+                        {touched.email && errors.email && <span className="text-red-500 text-[10px] font-bold">{t(errors.email)}</span>}
+                    </label>
+                    <div className="relative group/input">
+                      <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`}>
+                        <Mail size={18} />
                       </div>
- 
-                      <div className="space-y-1.5">
-                        <label className={`text-xs font-bold text-slate-700 flex justify-between ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>
-                            <span>{t('phone_label')} <span className="text-[#ff5722]">*</span></span>
-                            {touched.phone && errors.phone && <span className="text-red-500 text-[10px] font-bold">{t(errors.phone)}</span>}
-                        </label>
-                        <div className="relative group/input">
-                          <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`}>
-                            <Phone size={18} />
-                          </div>
-                          <input
-                            type="tel"
-                            name="phone"
-                            className={`w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-11 pl-4' : 'pl-11 pr-4'} transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400 ${touched.phone && errors.phone ? '!border-red-300 !ring-red-500/10' : ''}`}
-                            placeholder={t('phone_placeholder')}
-                            value={formData.phone}
-                            onChange={handleChange}
-                            onBlur={handleBlur}
-                            required
-                          />
-                        </div>
-                      </div>
+                      <input
+                        type="email"
+                        name="email"
+                        className={`w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-11 pl-4' : 'pl-11 pr-4'} transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400 ${touched.email && errors.email ? '!border-red-300 !ring-red-500/10' : ''}`}
+                        placeholder="votre@email.com"
+                        value={formData.email}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        required
+                      />
+                    </div>
                   </div>
-                </>
+
+                  <div className="space-y-1.5">
+                    <label className={`text-xs font-bold text-slate-700 flex justify-between ${language === 'ar' ? 'mr-1' : 'ml-1'}`}>
+                        <span>{t('phone_label')} <span className="text-[#ff5722]">*</span></span>
+                        {touched.phone && errors.phone && <span className="text-red-500 text-[10px] font-bold">{t(errors.phone)}</span>}
+                    </label>
+                    <div className="relative group/input">
+                      <div className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`}>
+                        <Phone size={18} />
+                      </div>
+                      <input
+                        type="tel"
+                        name="phone"
+                        className={`w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 ${language === 'ar' ? 'pr-11 pl-4' : 'pl-11 pr-4'} transition-all outline-none border text-[13px] text-slate-700 font-medium placeholder:text-slate-400 ${touched.phone && errors.phone ? '!border-red-300 !ring-red-500/10' : ''}`}
+                        placeholder={t('phone_placeholder')}
+                        value={formData.phone}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* Influencer Specific Fields */}

@@ -30,11 +30,12 @@ function page(blocks: any[], overrides: any = {}) {
 
 describe('renderDocument', () => {
   it('declines a page containing a block with no renderer', async () => {
-    // countdown, since slider and products gained renderers. Of the builder's
-    // palette only header, text and countdown are left, and no live page has
-    // ever carried one.
+    // Every type in the builder's palette now has a renderer, so the only
+    // block with none is one that does not exist. The validator refuses such a
+    // type on save; this is the compiler's own guard for a row that predates
+    // the validator or was written some other way.
     const html = await render(
-      page([{ id: 'a', type: 'countdown', content: {} }])
+      page([{ id: 'a', type: 'not_a_block', content: {} }])
     );
     expect(html).toBeNull();
   });
@@ -203,12 +204,37 @@ describe('renderDocument', () => {
     expect(html).toMatch(/a\[1\]==='PageView'/);
   });
 
-  it('emits no webfont request', async () => {
-    const html = await render(
-      page([{ id: 'a', type: 'image', content: { url: '/uploads/x.webp' } }])
-    );
-    expect(html).not.toContain('fonts.googleapis.com');
-    expect(html).not.toContain('@font-face');
+  it('groups multiple Meta and TikTok pixels so loaders and PageView execute only once', async () => {
+    const html = (await render(
+      page([{ id: 'a', type: 'image', content: { url: '/uploads/x.webp' } }], {
+        influencerPixels: [
+          { type: 'GLOBAL', platform: 'META', pixelId: 'FB1', conversionEvent: 'Lead' },
+          { type: 'GLOBAL', platform: 'META', pixelId: 'FB2', conversionEvent: 'Lead' },
+          { type: 'GLOBAL', platform: 'TIKTOK', pixelId: 'TT1', conversionEvent: 'Lead' },
+          { type: 'GLOBAL', platform: 'TIKTOK', pixelId: 'TT2', conversionEvent: 'Lead' },
+        ],
+      })
+    ))!;
+
+    // Both Meta IDs initialized
+    expect(html).toContain("fbq('init',\"FB1\")");
+    expect(html).toContain("fbq('init',\"FB2\")");
+    // Meta base script loader only injected once
+    const fbScriptCount = (html.match(/fbevents\.js/g) || []).length;
+    expect(fbScriptCount).toBe(1);
+    // PageView only called once
+    const metaPvCount = (html.match(/fbq\('track','PageView'\)/g) || []).length;
+    expect(metaPvCount).toBe(1);
+
+    // Both TikTok IDs loaded
+    expect(html).toContain('ttq.load("TT1")');
+    expect(html).toContain('ttq.load("TT2")');
+    // TikTok loader closure only emitted once
+    const ttLoaderCount = (html.match(/analytics\.tiktok\.com\/i18n\/pixel\/events\.js/g) || []).length;
+    expect(ttLoaderCount).toBe(1);
+    // ttq.page() only called once
+    const ttPageCount = (html.match(/ttq\.page\(\)/g) || []).length;
+    expect(ttPageCount).toBe(1);
   });
 });
 
@@ -235,5 +261,19 @@ describe('selectActivePixels', () => {
   it('drops pixels with no id rather than emitting a broken snippet', () => {
     const active = selectActivePixels([{ type: 'GLOBAL', platform: 'META', pixelId: '' }], 'X');
     expect(active).toEqual([]);
+  });
+
+  it('deduplicates identical platform:pixelId pairs', () => {
+    const duplicates = [
+      { type: 'GLOBAL', platform: 'META', pixelId: 'G1', conversionEvent: 'Lead' },
+      { type: 'GLOBAL', platform: 'META', pixelId: 'G1', conversionEvent: 'Lead' },
+      { type: 'GLOBAL', platform: 'TIKTOK', pixelId: 'TT1', conversionEvent: 'Lead' },
+      { type: 'GLOBAL', platform: 'TIKTOK', pixelId: 'TT1', conversionEvent: 'Lead' },
+    ];
+    const active = selectActivePixels(duplicates, 'CODE');
+    expect(active).toEqual([
+      { platform: 'META', pixelId: 'G1', conversionEvent: 'Lead' },
+      { platform: 'TIKTOK', pixelId: 'TT1', conversionEvent: 'Lead' },
+    ]);
   });
 });

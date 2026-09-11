@@ -21,6 +21,7 @@ import {
   type PlanDraft,
   type SubscriptionStatus,
 } from '../../lib/sheetPlansApi';
+import { swal } from '../ui/SweetAlert';
 
 /**
  * « Packs & abonnements » — le cinquième onglet de la console « Envoi des leads ».
@@ -207,12 +208,27 @@ export default function SheetPlansAdminPanel({ refreshToken = 0 }: SheetPlansAdm
     confirmText: string,
     successText: string
   ) => {
-    if (!window.confirm(confirmText)) return;
+    const ok = await swal.confirm({
+      type: verb === 'approve' ? 'question' : 'warning',
+      title: confirmText,
+      confirmText: verb === 'approve' ? 'Approuver' : verb === 'reject' ? 'Refuser' : 'Annuler la demande',
+      cancelText: 'Retour',
+    });
+    if (!ok) return;
     // Le motif est facultatif partout : sur un refus ou une annulation il part
     // dans la notification du vendeur, donc il vaut mieux le demander que de le
     // laisser deviner « pourquoi ».
     const note =
-      verb === 'approve' ? undefined : window.prompt('Motif (facultatif, transmis au vendeur) :') || undefined;
+      verb === 'approve'
+        ? undefined
+        : (await swal.prompt({
+            type: 'info',
+            title: 'Motif (facultatif)',
+            text: 'Transmis au vendeur dans sa notification.',
+            input: { type: 'textarea', required: false, placeholder: 'Expliquez la décision…' },
+            confirmText: 'Continuer',
+            cancelText: 'Sans motif',
+          })) || undefined;
 
     setActing(id);
     try {

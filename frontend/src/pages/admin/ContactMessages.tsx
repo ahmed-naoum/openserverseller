@@ -8,6 +8,7 @@ import {
   ChevronLeft, ChevronRight, X, User, Shield, Info, Calendar
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { swal } from '../../components/ui/SweetAlert';
 
 const STATUS_COLORS: Record<string, string> = {
   UNREAD: 'bg-rose-100 text-rose-800 border-rose-200',
@@ -75,8 +76,8 @@ export default function ContactMessages() {
     }
   };
 
-  const handleDelete = (id: number) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce message ? Cette action est irréversible.')) {
+  const handleDelete = async (id: number) => {
+    if (await swal.danger({ title: 'Supprimer ce message ?', text: 'Cette action est irréversible.', confirmText: 'Supprimer' })) {
       deleteMutation.mutate(id);
     }
   };

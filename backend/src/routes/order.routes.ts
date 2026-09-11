@@ -5,6 +5,7 @@ import axios from 'axios';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { prisma } from '../lib/prisma.js';
+import { restockOrderItems } from '../lib/orderStock.js';
 import { getSecret } from '../lib/secretStore.js';
 import { toColiatyCityName, coliatyCityNameResolver } from '../lib/coliatyCityName.js';
 import { productScopeOf, applyOrderProductScope } from '../lib/subAccountProductScope.js';
@@ -142,8 +143,13 @@ router.get(
 
     const where: any = {};
 
-    if (req.user!.roleName === 'VENDOR') {
-      where.vendorId = req.user!.id;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'FULFILLMENT_OPERATOR'].includes(req.user!.roleName);
+    if (!isAdmin) {
+      if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+        where.lead = { assignedAgentId: req.user!.id };
+      } else {
+        where.vendorId = req.user!.id;
+      }
     }
     applyOrderProductScope(where, productScopeOf(req));
 
@@ -162,6 +168,9 @@ router.get(
           items: {
             include: {
               product: {
+                include: { images: true },
+              },
+              storeProduct: {
                 include: { images: true },
               },
             },
@@ -195,16 +204,21 @@ router.get(
           platformFeeMad: o.platformFeeMad,
           status: o.status,
           paymentMethod: o.paymentMethod,
-          items: o.items.map((item) => ({
-            id: item.id,
-            productName: item.product.nameFr,
-            productDescription: item.product.description,
-            productImage: item.product.images[0]?.imageUrl,
-            productImages: item.product.images.map(img => img.imageUrl),
-            quantity: item.quantity,
-            unitPriceMad: item.unitPriceMad,
-            totalPriceMad: item.totalPriceMad,
-          })),
+          items: o.items.map((item: any) => {
+            // Either catalogue, with the dispatch-time snapshot as the floor.
+            const p = item.product ?? item.storeProduct;
+            const images: string[] = (p?.images ?? []).map((img: any) => img.imageUrl);
+            return {
+              id: item.id,
+              productName: p?.nameFr || p?.nameAr || item.productName || null,
+              productDescription: p?.description ?? null,
+              productImage: images[0],
+              productImages: images,
+              quantity: item.quantity,
+              unitPriceMad: item.unitPriceMad,
+              totalPriceMad: item.totalPriceMad,
+            };
+          }),
           createdAt: o.createdAt,
         })),
         pagination: {
@@ -224,6 +238,21 @@ router.get(
   asyncHandler(async (req, res) => {
     const { code } = req.params;
     if (req.query.refresh === '1') invalidateLabel(`parcel:${code}`);
+
+    // SEC-02: Tenant ownership check - Ensure caller has permission to view this parcel's label
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'FULFILLMENT_OPERATOR'].includes(req.user!.roleName);
+    if (!isAdmin) {
+      const order = await prisma.order.findFirst({
+        where: { coliatyPackageCode: code },
+        select: { id: true, vendorId: true },
+      });
+      if (!order) {
+        throw new AppException(404, 'Colis introuvable');
+      }
+      if (order.vendorId !== req.user!.id) {
+        throw new AppException(403, 'Accès non autorisé à cette étiquette.');
+      }
+    }
 
     try {
       const pdf = await getParcelLabelPdf(code);
@@ -265,6 +294,24 @@ router.post(
       throw new AppException(400, `Maximum ${MAX_BATCH_LABELS} colis par lot (${unique.length} demandés).`);
     }
 
+    // SEC-02: For non-admins, ensure all requested codes belong to the requesting vendor
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'FULFILLMENT_OPERATOR'].includes(req.user!.roleName);
+    let allowedCodes = unique;
+    if (!isAdmin) {
+      const vendorOrders = await prisma.order.findMany({
+        where: {
+          coliatyPackageCode: { in: unique },
+          vendorId: req.user!.id,
+        },
+        select: { coliatyPackageCode: true },
+      });
+      const vendorCodes = new Set(vendorOrders.map(o => o.coliatyPackageCode).filter(Boolean));
+      allowedCodes = unique.filter(code => vendorCodes.has(code));
+      if (allowedCodes.length === 0) {
+        throw new AppException(403, 'Accès non autorisé aux étiquettes demandées.');
+      }
+    }
+
     const { PDFDocument } = await import('pdf-lib');
     const merged = await PDFDocument.create();
 
@@ -273,7 +320,7 @@ router.post(
 
     // Sequential on purpose: the shared Coliaty queue paces the upstream calls,
     // and appending pages in order keeps the printed stack matching the UI list.
-    for (const code of unique) {
+    for (const code of allowedCodes) {
       try {
         const base64 = await getParcelLabelPdf(code);
         const doc = await PDFDocument.load(Buffer.from(base64, 'base64'));
@@ -440,8 +487,13 @@ router.get(
     const { id } = req.params;
 
     const where: any = { id: BigInt(id) };
-    if (req.user!.roleName === 'VENDOR') {
-      where.vendorId = req.user!.id;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'FULFILLMENT_OPERATOR'].includes(req.user!.roleName);
+    if (!isAdmin) {
+      if (req.user!.roleName === 'CALL_CENTER_AGENT') {
+        where.lead = { assignedAgentId: req.user!.id };
+      } else {
+        where.vendorId = req.user!.id;
+      }
     }
     applyOrderProductScope(where, productScopeOf(req));
 
@@ -1016,7 +1068,10 @@ router.post(
           customerName: lead.order!.customerName,
           customerCity: lead.order!.customerCity,
           vendorId: lead.vendorId,
-          productName: lead.order!.items[0]?.product?.nameFr || null,
+          productName:
+            lead.order!.items[0]?.product?.nameFr ||
+            (lead.order!.items[0] as any)?.productName ||
+            null,
           amountMad: Number(lead.order!.totalAmountMad) || 0,
         });
 
@@ -1169,12 +1224,7 @@ router.post(
       });
 
       // 5. Restore stock
-      for (const item of order.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stockQuantity: { increment: item.quantity } }
-        });
-      }
+      await restockOrderItems(tx, order.items);
     });
 
     res.json({

@@ -4,6 +4,7 @@ import BlockRenderer, { EditorBlock } from '../../components/helper/sitebuilder/
 import { publicApi } from '../../lib/api';
 import { readOrderHandoff, clearOrderHandoff, OrderHandoff } from '../../utils/orderHandoff';
 import ThankYouPage from './ThankYouPage';
+import { flatBlocks, settingsOf as sharedSettingsOf } from '@shared/document/migrate.js';
 
 /**
  * The per-link thank-you page, served at /r/:code/thank-you.
@@ -28,16 +29,13 @@ interface ThankYouData {
   pixels: any[];
 }
 
-/** Blocks out of a saved structure, tolerating the legacy bare-array shape. */
+/** Blocks out of a saved structure, whichever of the three shapes it is in. */
 function blocksOf(structure: any): EditorBlock[] {
-  if (!structure) return [];
-  if (Array.isArray(structure)) return structure as EditorBlock[];
-  return Array.isArray(structure.blocks) ? (structure.blocks as EditorBlock[]) : [];
+  return flatBlocks(structure) as EditorBlock[];
 }
 
 function settingsOf(structure: any): any {
-  if (!structure || Array.isArray(structure)) return {};
-  return structure.settings || {};
+  return sharedSettingsOf(structure);
 }
 
 export default function ReferralThankYouPage() {
@@ -88,60 +86,93 @@ export default function ReferralThankYouPage() {
     // guard keeps a direct or revisited thank-you URL from minting phantom
     // conversions.
     if (!order) return;
-    const pixels = data?.pixels || [];
+    const rawPixels = data?.pixels || [];
+    const matchingSinglePixels = rawPixels.filter((p: any) => p.type === 'SINGLE' && p.targetIds?.includes(code));
+    const candidatePixels = matchingSinglePixels.length > 0
+      ? matchingSinglePixels
+      : rawPixels.filter((p: any) => p.type === 'GLOBAL' || !p.type);
+
+    const seen = new Set<string>();
+    const pixels: any[] = [];
+    for (const p of candidatePixels) {
+      const platform = String(p?.platform || 'META').toUpperCase();
+      const pixelId = String(p?.pixelId || '').trim();
+      if (!pixelId) continue;
+      const key = `${platform}:${pixelId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pixels.push({
+        ...p,
+        platform,
+        pixelId,
+        conversionEvent: p?.conversionEvent || 'Purchase'
+      });
+    }
+
     if (!pixels.length || typeof window === 'undefined') return;
 
     firedRef.current = true;
 
     const value = order?.price ?? null;
     const currency = order?.currency || 'MAD';
+    const meta = value != null ? { value, currency } : undefined;
+    const w = window as any;
 
-    pixels.forEach((pixel: any) => {
-      const platform = (pixel.platform || 'META').toUpperCase();
-      const eventName = pixel.conversionEvent || 'Purchase';
-      const w = window as any;
+    const metaPixels = pixels.filter((p: any) => p.platform === 'META');
+    const googlePixels = pixels.filter((p: any) => p.platform === 'GOOGLE');
+    const tiktokPixels = pixels.filter((p: any) => p.platform === 'TIKTOK');
+    const snapPixels = pixels.filter((p: any) => p.platform === 'SNAPCHAT');
 
-      // Value and currency are what make the event usable for optimisation and
-      // ROAS. They are omitted rather than guessed when the handoff is absent.
-      const meta = value != null ? { value, currency } : undefined;
-
-      try {
-        if (platform === 'META') {
-          if (!w.fbq && pixel.pixelId) {
-            (function(f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
-              if (f.fbq) return;
-              n = f.fbq = function() {
-                n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
-              };
-              if (!f._fbq) f._fbq = n;
-              n.push = n;
-              n.loaded = !0;
-              n.version = '2.0';
-              n.queue = [];
-              t = b.createElement(e);
-              t.async = !0;
-              t.src = v;
-              s = b.getElementsByTagName(e)[0];
-              if (s && s.parentNode) s.parentNode.insertBefore(t, s);
-            })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
-            w.fbq('init', pixel.pixelId);
-          }
-          if (w.fbq) {
-            w.fbq('track', eventName, meta, order?.capiEventId ? { eventID: order.capiEventId } : undefined);
-          }
-        } else if (platform === 'GOOGLE' && w.gtag) {
-          w.gtag('event', eventName, { event_category: 'conversion', ...(value != null ? { value, currency } : {}) });
-        } else if (platform === 'TIKTOK' && w.ttq) {
-          const ttEvent = eventName === 'Purchase' ? 'CompletePayment' : 'CompleteRegistration';
-          w.ttq.track(ttEvent, meta);
-        } else if (platform === 'SNAPCHAT' && w.snaptr) {
-          const snapEvent = eventName === 'Purchase' ? 'PURCHASE' : 'SIGN_UP';
-          w.snaptr('track', snapEvent, value != null ? { price: value, currency } : undefined);
-        }
-      } catch {
-        /* a blocked or half-loaded pixel must never break the page */
+    if (metaPixels.length > 0) {
+      if (!w.fbq) {
+        (function(f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
+          if (f.fbq) return;
+          n = f.fbq = function() {
+            n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+          };
+          if (!f._fbq) f._fbq = n;
+          n.push = n;
+          n.loaded = !0;
+          n.version = '2.0';
+          n.queue = [];
+          t = b.createElement(e);
+          t.async = !0;
+          t.src = v;
+          s = b.getElementsByTagName(e)[0];
+          if (s && s.parentNode) s.parentNode.insertBefore(t, s);
+        })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
       }
-    });
+      metaPixels.forEach((pixel: any) => {
+        try {
+          w.fbq('init', pixel.pixelId);
+          const eventName = pixel.conversionEvent || 'Purchase';
+          w.fbq('trackSingle', pixel.pixelId, eventName, meta, order?.capiEventId ? { eventID: order.capiEventId } : undefined);
+        } catch {}
+      });
+    }
+
+    if (googlePixels.length > 0 && w.gtag) {
+      try {
+        const ev = googlePixels[0]?.conversionEvent || 'Purchase';
+        w.gtag('event', ev, { event_category: 'conversion', ...(value != null ? { value, currency } : {}) });
+      } catch {}
+    }
+
+    if (tiktokPixels.length > 0 && w.ttq) {
+      try {
+        const ev = tiktokPixels[0]?.conversionEvent || 'Purchase';
+        const ttEvent = ev === 'Purchase' ? 'CompletePayment' : 'CompleteRegistration';
+        w.ttq.track(ttEvent, meta, order?.capiEventId ? { event_id: order.capiEventId } : undefined);
+      } catch {}
+    }
+
+    if (snapPixels.length > 0 && w.snaptr) {
+      try {
+        const ev = snapPixels[0]?.conversionEvent || 'Purchase';
+        const snapEvent = ev === 'Purchase' ? 'PURCHASE' : 'SIGN_UP';
+        w.snaptr('track', snapEvent, value != null ? { price: value, currency } : undefined);
+      } catch {}
+    }
 
     // Spent — a refresh must not double-count the same order.
     clearOrderHandoff();

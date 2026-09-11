@@ -81,5 +81,15 @@
   "enter_6_digits": "يرجى إدخال الرمز المكون من 6 أرقام",
   "email_verified_success": "تم التحقق من البريد الإلكتروني بنجاح!",
   "email_already_exists": "هذا البريد الإلكتروني مستخدم بالفعل في حساب آخر",
-  "phone_already_exists": "رقم الهاتف هذا مستخدم بالفعل"
+  "phone_already_exists": "رقم الهاتف هذا مستخدم بالفعل",
+  "store_name_label": "اسم متجرك",
+  "store_name_placeholder": "my-store",
+  "store_name_hint": "سيتم إنشاء متجرك تلقائياً على هذا العنوان. يمكنك تغييره لاحقاً.",
+  "store_name_required": "اسم المتجر مطلوب",
+  "store_name_length": "بين 3 و 30 حرفاً",
+  "store_name_invalid": "أحرف إنجليزية صغيرة وأرقام وشرطات فقط",
+  "store_name_available": "متاح!",
+  "store_name_taken": "هذا الاسم مستخدم بالفعل",
+  "store_name_reserved": "هذا الاسم محجوز",
+  "store_name_blocked": "هذا الاسم يحتوي على كلمة ممنوعة"
 }

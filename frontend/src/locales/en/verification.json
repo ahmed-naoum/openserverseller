@@ -12,7 +12,6 @@
   "subdomain_btn_save": "Confirm Subdomain",
   "subdomain_toast_success": "Subdomain configured successfully!",
   "subdomain_toast_error": "Failed to save subdomain.",
-
   "email_title": "Email Verification",
   "email_desc": "Confirm your email address: {email}",
   "email_notice_to_send": "We will send a verification code to:",
@@ -28,7 +27,6 @@
   "email_toast_invalid": "Invalid or expired code",
   "email_toast_length": "Code must contain 6 digits",
   "email_toast_error_send": "Error sending code",
-
   "identity_title": "Identity Verification",
   "identity_desc": "Verify your identity by providing required documents (CIN or Passport)",
   "identity_rejected": "Your identity verification has been rejected",
@@ -71,7 +69,6 @@
   "identity_toast_addr_req": "Address is required",
   "identity_toast_success": "Documents and information submitted successfully!",
   "identity_toast_error": "Error during submission",
-
   "bank_title": "Bank Payment Method",
   "bank_desc": "Add at least one bank payment method (RIB)",
   "bank_methods_title": "Your payment methods",
@@ -93,7 +90,6 @@
   "bank_toast_success": "Bank account added successfully!",
   "bank_toast_invalid_otp": "Incorrect or expired code",
   "bank_toast_error_send": "Error sending code",
-
   "contract_title": "Contract & Engagement",
   "contract_desc": "Review our terms and sign your contract",
   "contract_preview_title": "Contract preview",
@@ -111,40 +107,34 @@
   "contract_toast_open_new": "Please sign the document in the new window.",
   "contract_toast_fail_link": "Unable to generate signature link.",
   "contract_toast_error": "Error preparing contract",
-
   "contract_general_title": "4. Common clause for all users (General)",
   "contract_general_subtitle": "Security and Intellectual Property:",
   "contract_general_p1": "• All software, systems, and artificial intelligence operating the platform are the exclusive property of Silacod.",
   "contract_general_p2": "• By using the platform, you agree to digitally sign contracts and receipts via the integrated DamaneSign service, and these signatures are legally binding.",
   "contract_general_p3": "• All commercial disputes are governed by Moroccan law, and exclusive jurisdiction is granted to the courts of the city of Casablanca.",
-
   "contract_vendor_title": "1. For Wholesalers",
   "contract_vendor_subtitle": "Supply and Offering Conditions:",
   "contract_vendor_p1": "• The wholesaler guarantees that all presented products are authentic and conform to the photos and descriptions provided.",
   "contract_vendor_p2": "• Stock status must be updated periodically; the platform is not responsible for orders placed on unavailable products.",
   "contract_vendor_p3": "• The merchant acknowledges full legal responsibility for product quality and hidden defects in accordance with Moroccan law.",
   "contract_vendor_p4": "• Merchant funds are collected after confirmation of product receipt by the final customer and expiration of the legal return period.",
-
   "contract_influencer_title": "2. For Influencers",
   "contract_influencer_subtitle": "Promotion and Commission Charter:",
   "contract_influencer_p1": "• The influencer agrees to promote products in a professional manner and not make false promises to consumers.",
   "contract_influencer_p2": "• All marketing content (images/videos) provided by the platform is protected intellectual property, and use is allowed only within the scope of Silacod campaigns.",
   "contract_influencer_p3": "• Claimed products do not appear in the influencer's account until after review and acceptance by the platform's technical support team.",
   "contract_influencer_p4": "• Commissions are calculated based on actual, paid sales and are disbursed according to the schedule specified in the dashboard.",
-
   "contract_seller_title": "3. For Sellers",
   "contract_seller_subtitle": "Sales and Orders Management:",
   "contract_seller_p1": "• The \"Seller\" acknowledges that their role is limited solely to marketing and selling products available in the platform's/suppliers' warehouses, and they have no right to add external products.",
   "contract_seller_p2": "• All submitted orders are audited by the platform administration before being sent to the shipping company.",
   "contract_seller_p3": "• The seller agrees to protect final customer data (Leads) privacy and not use it outside the scope of finalizing sales transactions via the platform, in compliance with CNDP laws.",
   "contract_seller_p4": "• Any attempt to manipulate the system or bypass commissions will result in immediate account suspension.",
-
   "status_completed": "Completed",
   "status_in_progress": "Under Review",
   "status_pending": "Pending",
   "status_rejected": "Rejected",
   "status_locked": "Locked",
-
   "header_title": "Ready to unlock your potential?",
   "header_subtitle": "Complete these verification steps to access all features of the platform",
   "header_warning": "You will not be able to perform important actions until your profile is verified",
@@ -157,5 +147,9 @@
   "step_in_progress_title": "Documents under review",
   "step_in_progress_desc": "Our team is reviewing your documents. You will be notified upon validation (usually within 24-48h).",
   "profile_verified_success_title": "Profile fully verified!",
-  "profile_verified_success_desc": "You now have access to all features of the platform."
+  "profile_verified_success_desc": "You now have access to all features of the platform.",
+  "store_ready_title": "Your store is live",
+  "subdomain_btn_edit": "Change store name",
+  "subdomain_btn_cancel": "Cancel",
+  "subdomain_rename_warning": "Renaming moves your store to the new address — links using the old one will stop working."
 }

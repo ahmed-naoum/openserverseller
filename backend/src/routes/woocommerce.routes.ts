@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { Router } from 'express';
 import axios from 'axios';
+import jwt from 'jsonwebtoken';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticate } from '../middleware/auth.js';
 import { enqueueSheetPush, enqueueSheetPushMany } from '../services/sheetPush.service.js';
@@ -80,8 +81,15 @@ router.post(
     const apiBaseUrl = process.env.API_BASE_URL || 'https://silacod.com/api/v1';
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
+    // SEC-07: Sign an HMAC state token so the callback cannot be forged by third parties
+    const stateToken = jwt.sign(
+      { vendorId, type: 'wc_auth' },
+      process.env.JWT_SECRET!,
+      { expiresIn: '1h' }
+    );
+
     const returnUrl = `${frontendUrl}/dashboard/woocommerce-callback`;
-    const callbackUrl = `${apiBaseUrl}/woocommerce/auth-callback`;
+    const callbackUrl = `${apiBaseUrl}/woocommerce/auth-callback?token=${encodeURIComponent(stateToken)}`;
 
     const authUrl = `${cleanUrl}/wc-auth/v1/authorize?app_name=${encodeURIComponent('SILACOD')}&scope=read_write&user_id=${encodeURIComponent(vendorId)}&return_url=${encodeURIComponent(returnUrl)}&callback_url=${encodeURIComponent(callbackUrl)}`;
 
@@ -109,8 +117,28 @@ router.post(
       return;
     }
 
+    // SEC-07: Verify cryptographic state token to prevent unauthorized key overwrites
+    const stateToken = (req.query.token || req.body.token) as string;
+    if (!stateToken) {
+      res.status(401).json({ success: false, message: 'Jeton de vérification manquant' });
+      return;
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(stateToken, process.env.JWT_SECRET!);
+    } catch {
+      res.status(401).json({ success: false, message: 'Jeton de vérification invalide ou expiré' });
+      return;
+    }
+
+    if (!decoded || decoded.type !== 'wc_auth' || decoded.vendorId !== Number(user_id)) {
+      res.status(403).json({ success: false, message: 'Échec de la validation de session WooCommerce' });
+      return;
+    }
+
     const vendor = await prisma.user.findUnique({
-      where: { id: user_id },
+      where: { id: Number(user_id) },
     });
 
     if (!vendor) {
@@ -119,7 +147,7 @@ router.post(
     }
 
     await prisma.user.update({
-      where: { id: user_id },
+      where: { id: Number(user_id) },
       data: {
         wooCommerceConsumerKey: consumer_key.trim(),
         wooCommerceConsumerSecret: consumer_secret.trim(),

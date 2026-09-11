@@ -20,6 +20,7 @@ import {
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Truck, CheckCircle, CheckCircle2, XCircle, Box, AlertCircle, X, BarChart3, Activity, PieChart as PieIcon, Zap, TrendingUp, History, MessageSquare
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { SweetAlertCard } from '../../components/ui/SweetAlert';
 
 const ALL_STATUS_BADGES: Record<string, { label: string; color: string; icon: React.ComponentType<any> }> = {
   // --- Cycle de vie / Stock ---
@@ -1795,44 +1796,18 @@ export default function InfluencerLeads() {
         </div>
       )}
 
-      {/* Confirmation Modal */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
-            <div className="p-6 text-center">
-              <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${confirmModal.variant === 'danger' ? 'bg-red-50 text-red-500' : 'bg-influencer-50 text-influencer-600'}`}>
-                {confirmModal.variant === 'danger' ? <AlertCircle size={32} /> : <Headphones size={32} />}
-              </div>
-              <h2 className="text-xl font-black text-slate-800 tracking-tight mb-2">
-                {confirmModal.title}
-              </h2>
-              <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                {confirmModal.message}
-              </p>
-            </div>
-            
-            <div className="p-6 bg-slate-50/50 flex gap-3">
-              <button
-                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                className="flex-1 px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 bg-white border border-slate-100 rounded-2xl transition-all shadow-sm"
-              >
-                {t('cancel', 'leads', 'Annuler')}
-              </button>
-              <button
-                onClick={confirmModal.onConfirm}
-                disabled={isPushingBulk}
-                className={`flex-1 px-6 py-3 text-xs font-black uppercase tracking-widest text-white rounded-2xl shadow-lg transition-all ${
-                  confirmModal.variant === 'danger' 
-                    ? 'bg-red-500 hover:bg-red-600 shadow-red-200' 
-                    : 'bg-influencer-600 hover:bg-influencer-700 shadow-influencer-200'
-                }`}
-              >
-                {isPushingBulk ? t('loading_generic', 'leads', 'En cours...') : t('confirm_btn', 'leads', 'Confirmer')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SweetAlertCard
+        open={confirmModal.isOpen}
+        type={confirmModal.variant === 'danger' ? 'danger' : 'question'}
+        icon={confirmModal.variant === 'danger' ? undefined : <Headphones size={34} />}
+        title={confirmModal.title}
+        text={confirmModal.message}
+        loading={isPushingBulk || !!confirmModal.isLoading}
+        cancelText={t('cancel', 'leads', 'Annuler')}
+        confirmText={t('confirm_btn', 'leads', 'Confirmer')}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+      />
     </div>
   );
 }

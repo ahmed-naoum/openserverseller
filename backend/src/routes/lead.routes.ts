@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { body, query, validationResult } from 'express-validator';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { ipOrderCountsFor, fraudThreshold } from '../lib/leadFraud.js';
 import axios from 'axios';
 import { getSecret } from '../lib/secretStore.js';
 import { toColiatyCityName } from '../lib/coliatyCityName.js';
@@ -14,7 +15,18 @@ import { FACTURED_SITUATIONS, WRITABLE_PAYMENT_SITUATIONS, isFactured } from '..
 import { SAFE_USER_SELECT } from '../lib/safeUserSelect.js';
 import { parseDateRange } from '../lib/dateRange.js';
 import { fetchAllInBatches } from '../lib/pagination.js';
+import { restockOrderItems, reserveOrderItems } from '../lib/orderStock.js';
 import { DEAD_NO_REPLY, SYSTEM_NOTE_PREFIX, releaseAtFor } from '../lib/leadRelease.js';
+import {
+  parseCartItems,
+  cartSubtotalMad,
+  cartTotalMad,
+  cartSummary,
+  cartParcelContent,
+  PARCEL_CONTENT_MIN,
+  PARCEL_CONTENT_MAX,
+} from '../lib/leadCart.js';
+import { AGENT_TRACKED_ACTIONS, agentHistoryWhere, tallyAgentHistory } from '../lib/agentHistory.js';
 import { enqueueSheetPush, enqueueSheetPushMany } from '../services/sheetPush.service.js';
 import { getLockedLeadIds, maskPhone } from '../services/leadCredits.service.js';
 import {
@@ -55,29 +67,6 @@ const DEFAULT_ROWS_PER_REQUEST = 200;
 const HISTORY_HARD_CAP = 200000;
 
 /**
- * Everything an agent can do to a lead that the agent dashboard scores them on,
- * in the order the tiles show it. `ASSIGNED` is the claim itself — a state, not
- * a result — and `PUSHED_TO_DELIVERY` is the hand-off to Coliaty; both are
- * listed so a lead always lands in exactly one bucket.
- *
- * These figures are read off `lead_status_history` rather than off the leads
- * table, because `assignedAgentId` is wiped the moment the reassignment cron
- * sends a lead back to the shared pool — and with it every trace that this
- * agent claimed it, called it and recorded an outcome. `changedBy` survives
- * that, so work stays attributed to whoever actually did it.
- */
-const AGENT_TRACKED_ACTIONS = [
-  'ASSIGNED',
-  'CALL_LATER',
-  'NO_REPLY',
-  'CONFIRMED',
-  'WRONG_ORDER',
-  'CANCEL_REASON_PRICE',
-  'CANCEL_ORDER',
-  'PUSHED_TO_DELIVERY',
-] as const;
-
-/**
  * A lead row that ships its order inline — what `/:id/detail` and the create
  * routes return. The order carries its own copy of the number under
  * `customerPhone`, so hiding only `phone` would leave the mask decorative.
@@ -100,95 +89,10 @@ const resolveRowLimit = (limit: unknown): number => {
   return Math.min(MAX_ROWS_PER_REQUEST, Math.max(1, parsed));
 };
 
-/**
- * The `where` that selects one agent's own actions out of `lead_status_history`.
- *
- * Shared by the dashboard aggregate (`/?withStats=true`) and the statistics page
- * (`/agent-statistics`) so the two can never disagree about what counts as an
- * action. The `Système :` exclusion is the important half — see SYSTEM_NOTE_PREFIX
- * for why the cron's own rows carry the agent's id and must still be dropped.
- *
- * `byLeadArrival` picks which timestamp the window narrows: the action itself
- * (false — "what did I get through today") or the lead's arrival (true — "how are
- * today's arrivals doing").
- */
-const agentHistoryWhere = (
-  agentId: number,
-  range: { gte?: Date; lte?: Date } | null,
-  byLeadArrival: boolean,
-): any => {
-  const where: any = {
-    changedBy: agentId,
-    OR: [{ notes: null }, { notes: { not: { startsWith: SYSTEM_NOTE_PREFIX } } }],
-  };
-  if (range) {
-    if (byLeadArrival) where.lead = { is: { createdAt: range } };
-    else where.createdAt = range;
-  }
-  return where;
-};
-
-type AgentHistoryRow = {
-  leadId: number;
-  newStatus: string;
-  lead?: { status: string } | null;
-};
-
-/**
- * The three honest readings of a pile of history rows, built in one pass.
- *
- * `byAction` counts the work (a number rung twice is two NO_REPLY), `byLead`
- * counts the customers, and `byLastAction` files each lead once under the agent's
- * final word on it — the only one of the three that sums to `leadsWorked`, which
- * is why the donut and every percentage are built on it.
- *
- * ROWS MUST BE ORDERED NEWEST FIRST: the first row seen for a lead is taken as
- * its last action.
- */
-const tallyAgentHistory = (rows: AgentHistoryRow[]) => {
-  const byAction: Record<string, number> = {};
-  const leadsPerAction: Record<string, Set<number>> = {};
-  const lastActionPerLead = new Map<number, string>();
-
-  for (const row of rows) {
-    byAction[row.newStatus] = (byAction[row.newStatus] || 0) + 1;
-    (leadsPerAction[row.newStatus] ||= new Set()).add(row.leadId);
-    if (lastActionPerLead.has(row.leadId)) continue;
-    // A lead already handed to Coliaty is booked as pushed whatever the last row
-    // says. The hand-off only started writing its own history row recently, so
-    // without this the leads pushed before that would still read as CONFIRMED.
-    lastActionPerLead.set(
-      row.leadId,
-      row.lead?.status === 'PUSHED_TO_DELIVERY' ? 'PUSHED_TO_DELIVERY' : row.newStatus
-    );
-  }
-
-  const byLastAction: Record<string, number> = {};
-  for (const action of lastActionPerLead.values()) {
-    byLastAction[action] = (byLastAction[action] || 0) + 1;
-  }
-
-  const byLead: Record<string, number> = {};
-  for (const [action, leadIds] of Object.entries(leadsPerAction)) {
-    byLead[action] = leadIds.size;
-  }
-
-  // Zero-fill so a tile the agent never lit renders as 0 instead of vanishing.
-  for (const action of AGENT_TRACKED_ACTIONS) {
-    byAction[action] ??= 0;
-    byLead[action] ??= 0;
-    byLastAction[action] ??= 0;
-  }
-
-  return {
-    byAction,
-    byLead,
-    byLastAction,
-    totalActions: rows.length,
-    leadsWorked: lastActionPerLead.size,
-    claimed: byLead.ASSIGNED,
-  };
-};
+// `agentHistoryWhere` + `tallyAgentHistory` are shared by the dashboard
+// aggregate (`/?withStats=true`), the statistics page (`/agent-statistics`)
+// and the admin reconciliation console, so the screens can never disagree
+// about what counts as an action — see lib/agentHistory.ts.
 
 // Lives in `lib/` so the vendor dashboard reads the same window from the same
 // pair of inputs — see the note there on why there is only one copy.
@@ -734,6 +638,15 @@ router.get(
     // for an admin, a helper or an agent — they have to be able to call.
     await maskLockedLeads(maskingVendorId(req), leads, LEAD_ROW_MASK);
 
+    // "How many orders had come from this address by the time this one landed"
+    // — the same count the automatic ban fires on, so a row badged SUSPECT here
+    // is exactly a row that tripped (or would trip) the ban. One query for the
+    // page; see lib/leadFraud.ts for why it is not a plain "last 24h" count.
+    const [ipCounts, ipThreshold] = await Promise.all([
+      ipOrderCountsFor(leads as any[]),
+      fraudThreshold(),
+    ]);
+
     res.json({
       status: 'success',
       data: {
@@ -794,6 +707,8 @@ router.get(
           source: l.source,
           ipAddress: l.ipAddress,
           ipCountry: l.ipCountry,
+          ipOrderCount: ipCounts.get(l.id) || 0,
+          ipSuspect: ipThreshold > 0 && (ipCounts.get(l.id) || 0) >= ipThreshold,
           createdAt: l.createdAt,
           // --- Additional detail (already loaded above, previously dropped) ---
           sourceMode: l.sourceMode,
@@ -1648,6 +1563,9 @@ router.get(
                   product: {
                     include: { images: { where: { isPrimary: true }, take: 1 } },
                   },
+                  storeProduct: {
+                    include: { images: { where: { isPrimary: true }, take: 1 } },
+                  },
                 },
               },
             },
@@ -1680,16 +1598,23 @@ router.get(
           packageContent: o.packageContent || null,
           packageNoOpen: o.packageNoOpen || false,
           productVariant: o.productVariant || null,
-          items: o.items?.map((item: any) => ({
-            id: item.id,
-            productId: item.productId,
-            productName: item.product?.nameFr || item.product?.nameAr,
-            productSku: item.product?.sku,
-            productImage: item.product?.images?.[0]?.imageUrl,
-            quantity: item.quantity,
-            unitPriceMad: item.unitPriceMad,
-            totalPriceMad: item.totalPriceMad,
-          })) || [],
+          items: o.items?.map((item: any) => {
+            // A line comes from one catalogue or the other. `productName` on the
+            // row is the snapshot taken at dispatch, and the only thing left to
+            // show if the product has since been deleted.
+            const p = item.product ?? item.storeProduct;
+            return {
+              id: item.id,
+              productId: item.productId,
+              storeProductId: item.storeProductId ?? null,
+              productName: p?.nameFr || p?.nameAr || item.productName || null,
+              productSku: p?.sku || item.productSku || null,
+              productImage: p?.images?.[0]?.imageUrl,
+              quantity: item.quantity,
+              unitPriceMad: item.unitPriceMad,
+              totalPriceMad: item.totalPriceMad,
+            };
+          }) || [],
           leadId: l.id,
           leadFullName: l.fullName,
           leadStatus: l.status,
@@ -2386,6 +2311,14 @@ router.get(
       }
     }
 
+    // SEC-03: Tenant ownership check for vendors & helpers
+    if (req.user!.roleName === 'VENDOR' && lead.vendorId !== req.user!.id) {
+      throw new AppException(403, 'Permission denied : ce lead ne vous appartient pas.');
+    }
+    if (!(await isLeadInProductScope(productScopeOf(req), lead.id))) {
+      throw new AppException(403, OUT_OF_SCOPE);
+    }
+
     // Same rule as the list: a seller reading the detail panel of a lead no
     // credit has paid for gets the row, not the number — including the copy the
     // order carries. `isLocked` rides along on the spread below.
@@ -2558,9 +2491,19 @@ router.get(
 
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
-      select: { id: true, phone: true, whatsapp: true, referralLink: { select: { code: true } } },
+      select: { id: true, vendorId: true, assignedAgentId: true, phone: true, whatsapp: true, referralLink: { select: { code: true } } },
     });
     if (!lead) throw new AppException(404, 'Lead introuvable');
+
+    if (req.user!.roleName === 'CALL_CENTER_AGENT' && lead.assignedAgentId !== req.user!.id) {
+      throw new AppException(403, 'Permission denied: Ce lead ne vous est pas assigné');
+    }
+    if (req.user!.roleName === 'VENDOR' && lead.vendorId !== req.user!.id) {
+      throw new AppException(403, 'Permission denied: Ce lead ne vous appartient pas');
+    }
+    if (!(await isLeadInProductScope(productScopeOf(req), lead.id))) {
+      throw new AppException(403, OUT_OF_SCOPE);
+    }
 
     // Match phones on their last 9 digits so 06…, +2126…, 2126… all line up
     const tail = (v?: string | null) => (v || '').replace(/\D/g, '').slice(-9);
@@ -3467,22 +3410,12 @@ router.post(
         if (orderIds.length > 0) {
           const items = await tx.orderItem.findMany({
             where: { orderId: { in: orderIds } },
-            select: { productId: true, quantity: true },
+            select: { productId: true, storeProductId: true, quantity: true },
           });
 
           // Give reserved inventory back before the items disappear, exactly as
-          // the single delete does — one update per product, not per item.
-          const perProduct = new Map<number, number>();
-          for (const item of items) {
-            if (!item.productId) continue;
-            perProduct.set(item.productId, (perProduct.get(item.productId) || 0) + item.quantity);
-          }
-          for (const [productId, quantity] of perProduct) {
-            await tx.product.update({
-              where: { id: productId },
-              data: { stockQuantity: { increment: quantity } },
-            });
-          }
+          // the single delete does.
+          await restockOrderItems(tx, items);
 
           await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
           await tx.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } });
@@ -4089,65 +4022,245 @@ router.post(
       });
     }
 
-    // Brand logic removed
-
-    let productToOrder = null;
-    if (productId && Number(productId) !== 0) {
-      productToOrder = await prisma.product.findUnique({ where: { id: Number(productId) } });
-    }
-    
-    // If no explicit productId, use the product from the lead's referral link
-    if (!productToOrder && lead.referralLink?.productId) {
-      productToOrder = await prisma.product.findUnique({ where: { id: lead.referralLink.productId } });
-    }
-    
-    // Last resort fallback: find any active product for this vendor
-    if (!productToOrder) {
-      productToOrder = await prisma.product.findFirst({
-        where: { ownerId: lead.vendorId, isActive: true },
-        orderBy: { createdAt: 'desc' },
-      });
-    }
-
-    if (!productToOrder) {
-      throw new AppException(400, 'No active product found for this vendor to create an order');
-    }
-
-    // --- STOCK VALIDATION ---
-    // Pre-existing race, made bigger rather than introduced here: this check sits
-    // ~110 lines and one blocking Coliaty call outside the transaction below, so
-    // two concurrent pushes can both pass it. What used to oversell by a single
-    // unit now oversells by a whole pack's worth. Left as-is deliberately — the
-    // fix is to move the guard inside the transaction, which is out of scope.
-    if (productToOrder.stockQuantity < effectiveQty) {
-      throw new AppException(400, `Stock insuffisant pour ce produit. (Disponible: ${productToOrder.stockQuantity}, Demandé: ${effectiveQty})`);
-    }
-
-    let unitPrice = productToOrder.retailPriceMad;
-
-    // The pack the customer picked on the landing page overrides the list price.
-    // This used to be a hand-rolled, case-sensitive, name-only copy of the shared
-    // matcher, so it resolved a different pack than the rest of the platform for
-    // any lead whose stored label differed by case or that only carried an id.
-    const selectedPack = findPackOption(lead);
-    if (selectedPack?.price) {
-      unitPrice = Number(selectedPack.price);
-    }
-
-    // Use override price if provided, then the price agreed on the confirmation
-    // call, and only then the pack/retail price.
+    // ─────────────────────────────────────────────────────────── what ships
     //
-    // `quantity` is a number of PACKS and a pack's price is the whole bundle's
-    // total — "2 Pièces + 1 Gratuite" is 399 MAD for all three pieces, not 399
-    // each. So the multiplier here is `quantity`, never `effectiveQty`: putting
-    // the unit count in this line would bill a 3-unit pack three times over.
-    const totalAmountMad =
-      package_price !== undefined
-        ? Number(package_price)
-        : lead.confirmedPriceMad !== null && lead.confirmedPriceMad !== undefined
-        ? Number(lead.confirmedPriceMad)
-        : unitPrice * Number(quantity);
-    
+    // Two shapes of lead reach this line. A landing-page lead is one product in
+    // one pack, which is what every line below used to assume. A storefront
+    // lead carries a basket in `cartItems` — several products, each with its
+    // own quantity and price.
+    //
+    // Both are reduced to one `dispatchLines` plan before anything irreversible
+    // happens, so the courier call, the order write, the history row and the
+    // stock decrements below stay single-path. The alternative — an `if` around
+    // each of those four — is how the parcel and the order drift apart.
+    const cartLines = parseCartItems(lead);
+    const isCart = cartLines.length > 0;
+
+    /**
+     * Which catalogue the basket ids belong to.
+     *
+     * A storefront lead carries `storeId` and its cart ids are `StoreProduct`
+     * rows; every other lead is a landing-page one and its ids are marketplace
+     * `Product` rows. The two tables number their rows independently, so id 42
+     * exists in both and means different goods — looking a cart id up in the
+     * wrong table either fails or, worse, finds someone else's product.
+     */
+    const isStoreLead = (lead as any).storeId != null;
+
+    interface DispatchLine {
+      product: { id: number; sku: string | null; nameFr: string; nameAr: string; stockQuantity: number };
+      /** UNITS of stock, never packs — every return path gives stock back from this. */
+      quantity: number;
+      unitPriceMad: number;
+      totalPriceMad: number;
+    }
+
+    let dispatchLines: DispatchLine[] = [];
+    let totalAmountMad = 0;
+    /** The line the courier prints on the parcel. Coliaty demands 5–100 chars. */
+    let parcelContent = '';
+    /** What goes in Order.productVariant, for the screens that read it. */
+    let orderVariantLabel: string | null = null;
+    let productToOrder: any = null;
+
+    if (isCart) {
+      // The agent's `quantity` is a pack multiplier for a single-product lead
+      // and means nothing for a basket — each line carries its own count. Taking
+      // it into account here would multiply the whole basket by 1 in the normal
+      // case and silently by N whenever an agent left the field filled in.
+      const wantedUnits = new Map<number, number>();
+      for (const line of cartLines) {
+        wantedUnits.set(line.productId, (wantedUnits.get(line.productId) || 0) + line.quantity);
+      }
+
+      // Deliberately not filtered on `isActive`. A seller who retires a
+      // product after a customer bought it still owes them the parcel, and the
+      // single-product path below fetches by id without that filter for the
+      // same reason.
+      const cartSelect = { id: true, sku: true, nameFr: true, nameAr: true, stockQuantity: true };
+      const cartProducts: any[] = isStoreLead
+        ? await (prisma as any).storeProduct.findMany({
+            where: { id: { in: [...wantedUnits.keys()] } },
+            select: cartSelect,
+          })
+        : await prisma.product.findMany({
+            where: { id: { in: [...wantedUnits.keys()] } },
+            select: cartSelect,
+          });
+      const byId = new Map<number, any>(cartProducts.map((p: any) => [p.id, p]));
+
+      // A product deleted between the order and the call. Refusing is the only
+      // safe answer: shipping the rest silently would hand the customer a short
+      // parcel and collect the full basket price.
+      const missing = [...wantedUnits.keys()].filter((id) => !byId.has(id));
+      if (missing.length) {
+        throw new AppException(
+          400,
+          `Produit introuvable dans le panier (id: ${missing.join(', ')}). Corrigez la commande avant de la pousser.`
+        );
+      }
+
+      // Stock is checked against the AGGREGATE per product, not per line: the
+      // same product can appear twice in one basket, and two separate checks of
+      // one unit each would both pass against a single remaining unit.
+      for (const [id, units] of wantedUnits) {
+        const p = byId.get(id)!;
+        if (p.stockQuantity < units) {
+          throw new AppException(
+            400,
+            `Stock insuffisant pour ${p.nameFr || p.nameAr}. (Disponible: ${p.stockQuantity}, Demandé: ${units})`
+          );
+        }
+      }
+
+      const cartSubtotal = cartSubtotalMad(cartLines);
+
+      // Same precedence as the single-product path: what the agent typed into
+      // the delivery modal, then what they agreed on the call, then what the
+      // customer actually saw and accepted at checkout (shipping included).
+      totalAmountMad =
+        package_price !== undefined
+          ? Number(package_price)
+          : lead.confirmedPriceMad !== null && lead.confirmedPriceMad !== undefined
+          ? Number(lead.confirmedPriceMad)
+          : cartTotalMad(lead, cartLines);
+
+      // The order's items must sum to the order's total — seven return and
+      // cancel paths refund from the items, and the invoice reads the total. So
+      // when an agent overrides the amount (a discount on the call, a dropped
+      // line settled verbally) the difference is spread across the lines in
+      // proportion to what each was worth. Shipping folds in the same way,
+      // exactly as it does on the single-product path where the whole collected
+      // amount sits on the one item.
+      const scale = cartSubtotal > 0 ? totalAmountMad / cartSubtotal : 0;
+      let allocated = 0;
+      dispatchLines = cartLines.map((line, index) => {
+        const isLast = index === cartLines.length - 1;
+        // The last line takes the remainder rather than its own rounded share,
+        // so a total of 100 across three lines is never 99.99.
+        const lineTotal = isLast
+          ? Math.max(0, totalAmountMad - allocated)
+          : Math.round(line.totalPriceMad * scale * 100) / 100;
+        allocated += lineTotal;
+        return {
+          product: byId.get(line.productId)!,
+          quantity: line.quantity,
+          unitPriceMad: line.quantity > 0 ? lineTotal / line.quantity : lineTotal,
+          totalPriceMad: lineTotal,
+        };
+      });
+
+      parcelContent = package_content
+        ? String(package_content).slice(0, PARCEL_CONTENT_MAX)
+        : cartParcelContent(cartLines);
+      orderVariantLabel = productVariant || lead.productVariant || cartSummary(cartLines, 120);
+      // Only for the packaging-desk ticket and the response payload. A basket
+      // has no single product, so the first line stands in for it.
+      productToOrder = dispatchLines[0]?.product ?? null;
+    } else {
+      // ───────────────────────────────────────────── single product, unchanged
+      if (productId && Number(productId) !== 0) {
+        productToOrder = await prisma.product.findUnique({ where: { id: Number(productId) } });
+      }
+
+      // If no explicit productId, use the product from the lead's referral link
+      if (!productToOrder && lead.referralLink?.productId) {
+        productToOrder = await prisma.product.findUnique({ where: { id: lead.referralLink.productId } });
+      }
+
+      // Last resort fallback: find any active product for this vendor
+      if (!productToOrder) {
+        productToOrder = await prisma.product.findFirst({
+          where: { ownerId: lead.vendorId, isActive: true },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
+
+      if (!productToOrder) {
+        throw new AppException(400, 'No active product found for this vendor to create an order');
+      }
+
+      // --- STOCK VALIDATION ---
+      // Pre-existing race, made bigger rather than introduced here: this check sits
+      // ~110 lines and one blocking Coliaty call outside the transaction below, so
+      // two concurrent pushes can both pass it. What used to oversell by a single
+      // unit now oversells by a whole pack's worth. Left as-is deliberately — the
+      // fix is to move the guard inside the transaction, which is out of scope.
+      if (productToOrder.stockQuantity < effectiveQty) {
+        throw new AppException(400, `Stock insuffisant pour ce produit. (Disponible: ${productToOrder.stockQuantity}, Demandé: ${effectiveQty})`);
+      }
+
+      let unitPrice = productToOrder.retailPriceMad;
+
+      // The pack the customer picked on the landing page overrides the list price.
+      // This used to be a hand-rolled, case-sensitive, name-only copy of the shared
+      // matcher, so it resolved a different pack than the rest of the platform for
+      // any lead whose stored label differed by case or that only carried an id.
+      const selectedPack = findPackOption(lead);
+      if (selectedPack?.price) {
+        unitPrice = Number(selectedPack.price);
+      }
+
+      // Use override price if provided, then the price agreed on the confirmation
+      // call, and only then the pack/retail price.
+      //
+      // `quantity` is a number of PACKS and a pack's price is the whole bundle's
+      // total — "2 Pièces + 1 Gratuite" is 399 MAD for all three pieces, not 399
+      // each. So the multiplier here is `quantity`, never `effectiveQty`: putting
+      // the unit count in this line would bill a 3-unit pack three times over.
+      totalAmountMad =
+        package_price !== undefined
+          ? Number(package_price)
+          : lead.confirmedPriceMad !== null && lead.confirmedPriceMad !== undefined
+          ? Number(lead.confirmedPriceMad)
+          : unitPrice * Number(quantity);
+
+      dispatchLines = [
+        {
+          product: productToOrder,
+          // Units, not packs. Seven separate return/cancel paths restore
+          // stock with `increment: item.quantity`, so this row is the only
+          // record of how much inventory the push took — storing the pack
+          // count here would leak the rest of the pack on every return.
+          quantity: effectiveQty,
+          // Kept consistent with the two fields around it: unitPriceMad ×
+          // quantity must equal totalPriceMad. Since the total is the
+          // bundle price, the per-unit figure has to be derived from it
+          // rather than being the pack price (same trick as the agent
+          // insert path above).
+          unitPriceMad: effectiveQty > 0 ? totalAmountMad / effectiveQty : totalAmountMad,
+          totalPriceMad: totalAmountMad,
+        },
+      ];
+
+      // Coliaty requires package_content between 5 and 100 characters
+      const finalVariant = productVariant || lead.productVariant;
+      const productName = productToOrder.nameFr || productToOrder.nameAr || '';
+      let baseContent = package_content;
+      if (!baseContent) {
+        if (productName && finalVariant) {
+          baseContent = `${productName} - ${finalVariant}`;
+        } else {
+          baseContent = finalVariant || productName || 'Marchandise';
+        }
+      }
+
+      // Append SKU and Pack if available for better visibility in Coliaty
+      let contentValue = baseContent;
+      const details = [];
+      if (productToOrder.sku) details.push(`SKU:${productToOrder.sku}`);
+      if (finalVariant && !baseContent.includes(finalVariant)) details.push(`PK:${finalVariant}`);
+
+      if (details.length > 0) {
+        contentValue = `${baseContent} (${details.join(' ')})`;
+      }
+
+      if (contentValue.length < PARCEL_CONTENT_MIN) contentValue = contentValue.padEnd(PARCEL_CONTENT_MIN, ' ');
+      if (contentValue.length > PARCEL_CONTENT_MAX) contentValue = contentValue.substring(0, PARCEL_CONTENT_MAX);
+      parcelContent = contentValue;
+      orderVariantLabel = productVariant || lead.productVariant;
+    }
+
     const commissionPercentage = parseFloat(getSecret('PLATFORM_COMMISSION_PERCENTAGE') || '15');
     const platformFeeMad = totalAmountMad * (commissionPercentage / 100);
     const vendorEarningMad = totalAmountMad - platformFeeMad;
@@ -4175,31 +4288,6 @@ router.post(
       if (normalizedPhone.startsWith('+212')) normalizedPhone = '0' + normalizedPhone.slice(4);
       else if (normalizedPhone.startsWith('212')) normalizedPhone = '0' + normalizedPhone.slice(3);
       else if (!normalizedPhone.startsWith('0')) normalizedPhone = '0' + normalizedPhone;
-      
-      // Coliaty requires package_content between 5 and 100 characters
-      const finalVariant = productVariant || lead.productVariant;
-      const productName = productToOrder.nameFr || productToOrder.nameAr || '';
-      let baseContent = package_content;
-      if (!baseContent) {
-        if (productName && finalVariant) {
-          baseContent = `${productName} - ${finalVariant}`;
-        } else {
-          baseContent = finalVariant || productName || 'Marchandise';
-        }
-      }
-      
-      // Append SKU and Pack if available for better visibility in Coliaty
-      let contentValue = baseContent;
-      const details = [];
-      if (productToOrder.sku) details.push(`SKU:${productToOrder.sku}`);
-      if (finalVariant && !baseContent.includes(finalVariant)) details.push(`PK:${finalVariant}`);
-      
-      if (details.length > 0) {
-        contentValue = `${baseContent} (${details.join(' ')})`;
-      }
-
-      if (contentValue.length < 5) contentValue = contentValue.padEnd(5, ' ');
-      if (contentValue.length > 100) contentValue = contentValue.substring(0, 100);
 
       coliatyResult = await callColiatyCreateParcel({
         package_reciever: receiverName,
@@ -4207,7 +4295,7 @@ router.post(
         package_price: Number(totalAmountMad),
         package_addresse: receiverAddress,
         package_city: receiverCity,
-        package_content: contentValue,
+        package_content: parcelContent,
         package_no_open: package_no_open ?? false,
         // The agent's call notes ("customer only available after 18h", "call
         // before delivery") are what the courier actually needs. Falls back to
@@ -4235,34 +4323,33 @@ router.post(
           platformFeeMad,
           paymentMethod,
           status: 'PENDING',
-          packageContent: package_content || productToOrder.nameFr || productToOrder.nameAr || 'Produit',
+          // The parcel line, not one product's name: for a basket this is the
+          // only place the whole shipment is described in one string, and the
+          // packaging desk works off it.
+          packageContent: parcelContent,
           packageNoOpen: package_no_open ?? false,
-          productVariant: productVariant || lead.productVariant,
+          productVariant: orderVariantLabel,
           ...(coliatyResult ? {
             coliatyPackageCode: coliatyResult.package_code,
             coliatyPackageId: coliatyResult.package_id,
           } : {}),
           items: {
-            create: [
-              {
-                productId: productToOrder!.id,
-                // Units, not packs. Seven separate return/cancel paths restore
-                // stock with `increment: item.quantity`, so this row is the only
-                // record of how much inventory the push took — storing the pack
-                // count here would leak the rest of the pack on every return.
-                quantity: effectiveQty,
-                // Kept consistent with the two fields around it: unitPriceMad ×
-                // quantity must equal totalPriceMad. Since the total is the
-                // bundle price, the per-unit figure has to be derived from it
-                // rather than being the pack price (same trick as the agent
-                // insert path above).
-                unitPriceMad: effectiveQty > 0 ? totalAmountMad / effectiveQty : totalAmountMad,
-                totalPriceMad: totalAmountMad,
-              },
-            ],
+            create: dispatchLines.map((line) => ({
+              // One column or the other, never both — see lib/orderStock.ts.
+              // The single-product path is always a marketplace product: it is
+              // the agent picking from the catalogue, not a storefront basket.
+              ...(isStoreLead && isCart
+                ? { storeProductId: line.product.id }
+                : { productId: line.product.id }),
+              productName: line.product.nameFr || line.product.nameAr || null,
+              productSku: line.product.sku || null,
+              quantity: line.quantity,
+              unitPriceMad: line.unitPriceMad,
+              totalPriceMad: line.totalPriceMad,
+            })),
           },
         },
-        include: { items: { select: { quantity: true } } },
+        include: { items: { select: { productId: true, storeProductId: true, quantity: true } } },
       });
 
       // Update lead status so it disappears from the active list
@@ -4287,13 +4374,11 @@ router.post(
       });
 
       // --- STOCK DECREMENT ---
-      // Read the figure back off the row that was just written instead of
-      // recomputing it: the return paths give stock back from OrderItem.quantity,
+      // Read the figures back off the rows that were just written instead of
+      // recomputing them: the return paths give stock back from OrderItem.quantity,
       // so the two numbers drifting apart silently creates or destroys inventory.
-      await tx.product.update({
-        where: { id: productToOrder!.id },
-        data: { stockQuantity: { decrement: newOrder.items[0].quantity } }
-      });
+      //
+      await reserveOrderItems(tx, newOrder.items);
 
       return newOrder;
     });
@@ -4308,7 +4393,11 @@ router.post(
             customerName: order.customerName,
             customerCity: order.customerCity,
             vendorId: order.vendorId,
-            productName: productToOrder?.nameFr || productToOrder?.nameAr || null,
+            // For a basket, the packer needs the whole shipment, not the first
+            // line of it — this is the label they pick and pack against.
+            productName: isCart
+              ? parcelContent
+              : productToOrder?.nameFr || productToOrder?.nameAr || null,
             amountMad: Number(order.totalAmountMad) || 0,
           },
         ],
@@ -4471,12 +4560,7 @@ router.post(
             // Restore Stock
             const stockRestorable = !['CANCELED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE', 'RETURNED', 'CANCELLED'].includes(order.status);
             if (stockRestorable) {
-              for (const item of order.items) {
-                await tx.product.update({
-                  where: { id: item.productId },
-                  data: { stockQuantity: { increment: item.quantity } }
-                });
-              }
+              await restockOrderItems(tx, order.items);
             }
             processed.push(order.id);
           }
@@ -4568,12 +4652,7 @@ router.post(
       // 3. Increment Stock Back (Only if it wasn't already in a cancelled/returned status)
       const stockAlreadyRestoredStatuses = ['CANCELED', 'CANCELED_BY_SELLER', 'CANCELED_BY_SYSTEM', 'REFUSE', 'RETURNED', 'CANCELLED'];
       if (!stockAlreadyRestoredStatuses.includes(order.status)) {
-        for (const item of order.items) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stockQuantity: { increment: item.quantity } }
-          });
-        }
+        await restockOrderItems(tx, order.items);
       }
 
       const userId = order.lead!.referralLink?.influencerId || order.vendorId;
@@ -4823,15 +4902,9 @@ router.delete(
         // inventory that was never shipped.
         const items = await tx.orderItem.findMany({
           where: { orderId: existingOrder.id },
-          select: { productId: true, quantity: true },
+          select: { productId: true, storeProductId: true, quantity: true },
         });
-        for (const item of items) {
-          if (!item.productId) continue;
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stockQuantity: { increment: item.quantity } },
-          });
-        }
+        await restockOrderItems(tx, items);
 
         await tx.orderItem.deleteMany({ where: { orderId: existingOrder.id } });
         await tx.orderStatusHistory.deleteMany({ where: { orderId: existingOrder.id } });

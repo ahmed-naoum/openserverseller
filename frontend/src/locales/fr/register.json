@@ -81,5 +81,15 @@
   "enter_6_digits": "Veuillez entrer le code à 6 chiffres",
   "email_verified_success": "Email vérifié avec succès !",
   "email_already_exists": "Cet email est déjà utilisé par un autre compte",
-  "phone_already_exists": "Ce numéro de téléphone est déjà utilisé"
+  "phone_already_exists": "Ce numéro de téléphone est déjà utilisé",
+  "store_name_label": "Nom de votre boutique",
+  "store_name_placeholder": "ma-boutique",
+  "store_name_hint": "Votre boutique sera créée automatiquement sur cette adresse. Vous pourrez la modifier plus tard.",
+  "store_name_required": "Le nom de la boutique est requis",
+  "store_name_length": "Entre 3 et 30 caractères",
+  "store_name_invalid": "Lettres minuscules, chiffres et tirets uniquement",
+  "store_name_available": "Disponible !",
+  "store_name_taken": "Ce nom est déjà pris",
+  "store_name_reserved": "Ce nom est réservé",
+  "store_name_blocked": "Ce nom contient un mot interdit"
 }

@@ -122,6 +122,43 @@ router.post(
   })
 );
 
+router.post(
+  '/test-broadcast',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { title, body, type } = req.body;
+    const { createNotification } = await import('../utils/notification.js');
+    const notif = await createNotification(
+      req.user!.id,
+      type || 'TEST_BROADCAST',
+      title || '💰 Diffusion WebSocket reçue !',
+      body || 'Cet événement a été diffusé en direct depuis le serveur vers votre téléphone mobile.'
+    );
+
+    // Direct broadcast to io rooms
+    const { io } = await import('../index.js');
+    if (io) {
+      const payload = notif || {
+        id: Date.now(),
+        type: type || 'TEST_BROADCAST',
+        title: title || '💰 Diffusion WebSocket reçue !',
+        body: body || 'Cet événement a été diffusé en direct vers votre téléphone mobile.',
+        createdAt: new Date().toISOString(),
+      };
+      io.to(`user:${req.user!.uuid}`).emit('broadcast:notification', payload);
+      io.to(`user:${req.user!.id}`).emit('broadcast:notification', payload);
+      io.to('broadcast').emit('broadcast:notification', payload);
+      io.to('mobile').emit('broadcast:notification', payload);
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Notification diffusée en direct par WebSocket',
+      data: notif,
+    });
+  })
+);
+
 router.delete(
   '/:id',
   authenticate,

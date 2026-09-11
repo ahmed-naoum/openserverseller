@@ -31,6 +31,11 @@ import { amountToCents, replyPriceCents, centsToReplies } from '../../lib/waPric
 import { nudgeWorker } from '../../lib/waWorkerClient.js';
 import { testModel, testDir } from '../../wa/modelTest.js';
 import { flushWaLogs } from '../../services/waLogs.service.js';
+import { getBuilderSettings, setBuilderSettings, getBuilderStats, resolveBuilderModel, resolveGptModel, interpretBrief } from '../../services/designBrain.service.js';
+import { generateDesign } from '../../shared/templates/opendesign.js';
+import { openaiStatus } from '../../services/openai.service.js';
+import { availableImageEngines, engineLabel } from '../../services/designImages.service.js';
+import { resolveCodexBin } from '../../services/codexCli.service.js';
 
 const router = Router();
 
@@ -48,7 +53,110 @@ router.use(authenticate, authorize('SUPER_ADMIN'));
  * a model nobody calls is worse than no selector, so it is not offered here and
  * a body naming it is refused.
  */
-const MODEL_ROLES = ['BRAIN', 'STT', 'TTS'];
+const MODEL_ROLES = ['BRAIN', 'STT', 'TTS', 'BUILDER'];
+
+/* ------------------------------------------------------------------ */
+/* the store builder's brain (OpenDesign)                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Which model reads OpenDesign briefs, whether it writes copy, and how it has
+ * been doing. Off by default: with nothing enabled the builder uses its
+ * built-in reader and no call is made.
+ */
+router.get(
+  '/builder',
+  asyncHandler(async (_req, res) => {
+    await ensureCatalogue();
+    const { resolveBin } = await import('../../wa/cliProvider.js');
+    const cliBin = resolveBin();
+    const [settings, stats, resolved, models, openaiModels] = await Promise.all([
+      getBuilderSettings(),
+      getBuilderStats(),
+      resolveBuilderModel(),
+      prisma.aiModel.findMany({
+        where: { provider: { in: ['anthropic', 'claude-cli'] }, role: { in: ['BUILDER', 'BRAIN'] }, isEnabled: true },
+        orderBy: [{ role: 'desc' }, { sortOrder: 'asc' }, { id: 'asc' }],
+        select: { id: true, label: true, modelId: true, role: true, isDefault: true, adminOnly: true, provider: true },
+      }),
+      // GPT rows added to the catalogue (provider "openai") for the GPT mode; without one the secret's model is used.
+      prisma.aiModel.findMany({
+        where: { provider: 'openai', role: { in: ['BUILDER', 'BRAIN'] }, isEnabled: true },
+        orderBy: [{ role: 'desc' }, { sortOrder: 'asc' }, { id: 'asc' }],
+        select: { id: true, label: true, modelId: true, role: true, isDefault: true, adminOnly: true, provider: true },
+      }),
+    ]);
+    const resolvedGpt = await resolveGptModel(settings);
+    res.json({
+      status: 'success',
+      data: {
+        settings,
+        stats,
+        resolved: resolved
+          ? {
+              id: (resolved as any).id ?? 0,
+              label: (resolved as any).label ?? (resolved.provider === 'claude-cli' ? `Claude ${resolved.modelId.toUpperCase()} (CLI)` : resolved.modelId),
+              modelId: resolved.modelId,
+              role: (resolved as any).role ?? 'BUILDER',
+              provider: resolved.provider,
+            }
+          : null,
+        models,
+        openaiModels,
+        resolvedGpt,
+        cliDetected: Boolean(cliBin),
+        cliPath: cliBin,
+        // The GPT side: key and defaults from Variables & Secrets, model optionally from the catalogue.
+        openai: openaiStatus(),
+        // The photo chain, in the admin's order, narrowed to what is installed or configured.
+        imageEngines: availableImageEngines().map(engineLabel),
+        codexPath: resolveCodexBin(),
+      },
+    });
+  })
+);
+
+router.put(
+  '/builder',
+  asyncHandler(async (req, res) => {
+    const body = req.body ?? {};
+    if (body.modelId !== undefined && body.modelId !== null) {
+      const id = Number(body.modelId);
+      const row = await prisma.aiModel.findFirst({ where: { id, provider: { in: ['anthropic', 'claude-cli'] }, isEnabled: true } });
+      if (!row) throw new AppException(400, 'Ce modèle n’existe pas, n’est pas activé, ou n’est pas pris en charge.');
+      body.modelId = id;
+    }
+    if (body.gptModelId !== undefined && body.gptModelId !== null) {
+      const id = Number(body.gptModelId);
+      const row = await prisma.aiModel.findFirst({ where: { id, provider: 'openai', isEnabled: true } });
+      if (!row) throw new AppException(400, 'Ce modèle GPT n’existe pas dans le catalogue, n’est pas activé, ou n’a pas le fournisseur « openai ».');
+      body.gptModelId = id;
+    }
+    const settings = await setBuilderSettings(body);
+    res.json({ status: 'success', data: { settings } });
+  })
+);
+
+/** Reads one brief with the configured model and composes it, so an admin sees exactly what a seller would get. */
+router.post(
+  '/builder/test',
+  asyncHandler(async (req, res) => {
+    const prompt = String(req.body?.prompt || 'Boutique de chaussures de sport, fond noir, boutons rouges, avec avis clients, sans FAQ').trim().slice(0, 600);
+    const settings = { ...(await getBuilderSettings()), enabled: true };
+    const provider = req.body?.provider === 'openai' ? 'openai' : 'claude';
+    const started = Date.now();
+    const { spec, engine } = await interpretBrief({ prompt, storeName: 'Boutique test', settings, provider });
+    const design = generateDesign({ prompt, storeName: 'Boutique test' }, spec);
+    res.json({
+      status: 'success',
+      data: {
+        engine, spec, ms: Date.now() - started,
+        design: { label: design.label, niche: design.nicheLabel, mood: design.mood, palette: design.palette, fontFamily: design.fontFamily, sections: design.sections, rationale: design.rationale, variant: design.variant },
+        stats: await getBuilderStats(),
+      },
+    });
+  })
+);
 
 /* ------------------------------------------------------------------ */
 /* model catalogue                                                     */

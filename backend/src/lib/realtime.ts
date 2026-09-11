@@ -53,3 +53,37 @@ export const emitLeadUnassigned = (
     console.error('[realtime] lead-unassigned emit failed:', err);
   }
 };
+
+/** Why a session ended — picks the notice the login page shows. */
+export type SessionEndReason = 'logout' | 'expired' | 'revoked';
+
+/**
+ * Tell every socket signed in as this user that their session is over.
+ *
+ * Sockets join both `user:<uuid>` and `user:<id>` (see index.ts), so either
+ * identifier reaches them; chaining both rooms is a union, not a double send.
+ *
+ * This is the arm that reaches OTHER DEVICES. A browser's own tabs are already
+ * handled without the server — they share one localStorage and talk over a
+ * BroadcastChannel — so this exists for the phone left open on the dashboard
+ * while the laptop signs out, and for anything server-side that needs to end a
+ * session it did not start.
+ */
+export const emitSessionEnded = (
+  target: { userId?: number | null; userUuid?: string | null },
+  reason: SessionEndReason = 'revoked',
+) => {
+  if (!ioRef) return;
+  const rooms = [
+    target.userUuid ? `user:${target.userUuid}` : null,
+    target.userId ? `user:${target.userId}` : null,
+  ].filter(Boolean) as string[];
+  if (!rooms.length) return;
+
+  try {
+    rooms.reduce((channel, room) => channel.to(room), ioRef as any).emit('auth:session-ended', { reason });
+  } catch (err) {
+    // A signed-out user is signed out whether or not the broadcast lands.
+    console.error('[realtime] session-ended emit failed:', err);
+  }
+};

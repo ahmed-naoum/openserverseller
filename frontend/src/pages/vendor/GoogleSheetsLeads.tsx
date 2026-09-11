@@ -43,6 +43,7 @@ import { format } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
 import googleSheetsLogo from '../../assets/google-sheets-logo.svg';
 import { currentBasePath } from '../../lib/dashboardBase';
+import { swal } from '../../components/ui/SweetAlert';
 
 interface GoogleSheetsOrder {
   id: string | number;
@@ -195,7 +196,7 @@ export default function GoogleSheetsLeads() {
   };
 
   const handleRotateToken = async () => {
-    if (!window.confirm('Voulez-vous vraiment régénérer votre Token Webhook ? Vous devrez mettre à jour la variable TOKEN dans votre Google Apps Script.')) {
+    if (!(await swal.warn({ title: 'Régénérer le token Webhook ?', text: 'Vous devrez mettre à jour la variable TOKEN dans votre Google Apps Script.', confirmText: 'Régénérer' }))) {
       return;
     }
     setIsRotatingToken(true);

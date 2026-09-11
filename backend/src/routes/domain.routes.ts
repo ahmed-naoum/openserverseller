@@ -4,7 +4,11 @@ import { Resolver } from 'dns/promises';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
 import { authenticate } from '../middleware/auth.js';
-import { CloudflareDomainService, CustomHostname } from '../services/cloudflare-domain.service.js';
+import {
+  CloudflareDomainService,
+  CustomHostname,
+  getHostnamesForDomain,
+} from '../services/cloudflare-domain.service.js';
 import { invalidateCustomDomainCache } from '../lib/customDomainOrigins.js';
 
 const router = Router();
@@ -75,6 +79,9 @@ function stateOf(user: DomainFields) {
         : null,
     cnameRecord: user.customDomain
       ? { type: 'CNAME', name: user.customDomain, value: target }
+      : null,
+    wwwCnameRecord: user.customDomain
+      ? { type: 'CNAME', name: `www.${user.customDomain}`, value: target }
       : null,
     cnameTarget: target,
   };
@@ -281,23 +288,21 @@ router.post(
       throw new AppException(400, "Ce domaine vient d'être connecté par un autre compte.");
     }
 
-    // Ownership is proven; register the hostname. A failure here is recorded and
+    // Ownership is proven; register both apex and www hostnames. A failure here is recorded and
     // shown rather than swallowed — a silent failure used to leave the vendor on
     // PENDING with nothing to act on.
     let cfId: string | null = null;
     let cfError: string | null = null;
     try {
-      const created = await CloudflareDomainService.addCustomHostname(domain);
-      cfId = created.id;
-    } catch (err: any) {
-      // An orphan from an earlier attempt makes the POST fail as a duplicate.
-      const existing = await CloudflareDomainService.findByHostname(domain);
-      if (existing) {
-        cfId = existing.id;
-      } else {
-        cfError = err?.message || "Cloudflare a refusé l'enregistrement de ce domaine.";
-        console.error('[domain] Cloudflare registration failed for', domain, err);
+      const { cfIds, errors } = await CloudflareDomainService.ensureHostnamesForDomain(domain);
+      if (cfIds.length > 0) {
+        cfId = cfIds.join(',');
+      } else if (errors.length > 0) {
+        cfError = errors[0];
       }
+    } catch (err: any) {
+      cfError = err?.message || "Cloudflare a refusé l'enregistrement de ce domaine.";
+      console.error('[domain] Cloudflare registration failed for', domain, err);
     }
 
     const updated = await prisma.user.update({
@@ -341,11 +346,18 @@ router.post(
     let cfId = user.customDomainCfId;
     let cfError: string | null = null;
 
-    if (!cfId || cfId === NO_CF_ID) {
+    const expectedHostnames = getHostnamesForDomain(user.customDomain);
+    const currentIds = (cfId && cfId !== NO_CF_ID) ? cfId.split(',').map((s) => s.trim()).filter(Boolean) : [];
+
+    // Re-register or ensure all expected hostnames (apex + www) are in place
+    if (currentIds.length < expectedHostnames.length || cfId === NO_CF_ID || !cfId) {
       try {
-        const existing = await CloudflareDomainService.findByHostname(user.customDomain);
-        const record = existing || (await CloudflareDomainService.addCustomHostname(user.customDomain));
-        cfId = record.id;
+        const { cfIds, errors } = await CloudflareDomainService.ensureHostnamesForDomain(user.customDomain);
+        if (cfIds.length > 0) {
+          cfId = cfIds.join(',');
+        } else if (errors.length > 0) {
+          cfError = errors[0];
+        }
       } catch (err: any) {
         cfError = err?.message || "Cloudflare a refusé l'enregistrement de ce domaine.";
         console.error('[domain] Cloudflare re-registration failed for', user.customDomain, err);
@@ -355,9 +367,9 @@ router.post(
     let newStatus = user.customDomainStatus;
     if (cfId && cfId !== NO_CF_ID) {
       try {
-        const record = await CloudflareDomainService.getHostnameStatus(cfId);
-        newStatus = statusFrom(record);
-        cfError = errorFrom(record);
+        const check = await CloudflareDomainService.getHostnamesStatus(cfId);
+        newStatus = check.status;
+        cfError = check.error;
       } catch (err: any) {
         cfError = err?.message || 'Impossible de lire le statut du domaine sur Cloudflare.';
         console.error('[domain] Cloudflare status check failed for', user.customDomain, err);

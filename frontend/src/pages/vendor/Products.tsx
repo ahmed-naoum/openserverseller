@@ -7,6 +7,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { buildReferralUrl } from '../../utils/referral';
 import { containsBlockedWord } from '../../utils/blockedWords';
 import { useAuth } from '../../contexts/AuthContext';
+import PageHeader from '../../components/common/PageHeader';
 
 export default function VendorProducts() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -211,21 +212,22 @@ const handleNameChange = (val: string) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Catalogue Produits</h1>
-          <p className="text-gray-500 mt-1">+200 produits personnalisables</p>
-        </div>
-        <div className="flex gap-3">
-          <input
-            type="text"
-            className="input w-64"
-            placeholder="Rechercher..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
+      <PageHeader
+        icon={Package}
+        title="Catalogue Produits"
+        subtitle="+200 produits personnalisables"
+        actions={
+          <div className="flex gap-3">
+            <input
+              type="text"
+              className="input w-64"
+              placeholder="Rechercher..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        }
+      />
 
       {/* Categories Filter */}
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">

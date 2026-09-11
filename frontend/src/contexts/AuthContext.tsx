@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi, settingsApi } from '../lib/api';
 import { VENDOR_HELPER_BASE } from '../lib/dashboardBase';
+import { clearSessionStorage, endSession, leaveIfSessionBound, onSessionEnded } from '../lib/session';
 
 export interface AuthUser {
   uuid: string;
@@ -50,6 +51,7 @@ export interface AuthUser {
   subCanViewInvoices?: boolean;
   subCanViewIntegrations?: boolean;
   subCanViewMarketplace?: boolean;
+  subCanViewAbandonedCarts?: boolean;
   subCanManageSupport?: boolean;
   subCanUseChat?: boolean;
   subCanManagePixels?: boolean;
@@ -140,12 +142,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authApi.me();
       setUser(response.data.data.user);
-    } catch {
-      setUser(null);
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
+    } catch (error: any) {
+      // Only an outright rejection of the token ends the session. Any failure
+      // used to clear it, which now costs more than it did: dropping the access
+      // token signs the user out of every other tab too, and a 500 or a dropped
+      // connection is not a reason to do that.
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) {
+        setUser(null);
+        clearSessionStorage();
+      }
     }
   };
+
+  /**
+   * The session ended somewhere else — another tab signed out, or a request in
+   * this one came back with a token the server no longer accepts.
+   *
+   * The tokens are already gone by the time this runs (localStorage is shared);
+   * what is left is this tab's React tree, still painting a signed-in dashboard.
+   * Drop the user so the guards take over, and hard-navigate away when the page
+   * on screen needed the session.
+   */
+  useEffect(() => onSessionEnded(({ reason }) => {
+    setUser(null);
+    setIsLoading(false);
+    leaveIfSessionBound(reason);
+  }), []);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -323,10 +346,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('originalToken');
-    localStorage.removeItem('originalRefreshToken');
+    // Clears the tokens AND tells every other tab of this browser to do the
+    // same, so a dashboard left open in a second tab stops rendering a session
+    // that no longer exists instead of failing on its next click.
+    endSession('logout');
     setUser(null);
   };
 

@@ -30,6 +30,18 @@ export const BASE_CSS =
 export interface PageStyleInput {
   backgroundColor?: unknown;
   maxWidth?: unknown;
+  /** A Google Fonts family name, set by the store compiler from the store's brand font. */
+  fontFamily?: unknown;
+}
+
+/**
+ * A font family name the head can put in a Google Fonts URL and the sheet in
+ * a `font-family` declaration: letters, digits and spaces only. Anything else
+ * — a quote, a semicolon, a URL — is not a font and yields nothing.
+ */
+export function safeFont(raw: unknown): string {
+  const value = String(raw ?? '').trim();
+  return /^[A-Za-z0-9 ]{2,40}$/.test(value) ? value : '';
 }
 
 /**
@@ -42,7 +54,11 @@ export interface PageStyleInput {
 export function pageCss(settings: PageStyleInput): string {
   const bg = safeColor(settings?.backgroundColor, '#f9fafb');
   const maxWidth = num(settings?.maxWidth, 640, 280, 1600);
-  return `body{background:${bg}}.pg{max-width:${maxWidth}px}`;
+  const font = safeFont(settings?.fontFamily);
+  // The brand font goes in front of the stack, so text renders in the system
+  // font until the webfont arrives and then swaps — never invisible.
+  const fontRule = font ? `body{font-family:'${font}',${FONT_STACK}}` : '';
+  return `body{background:${bg}}.pg{max-width:${maxWidth}px}${fontRule}`;
 }
 
 /**

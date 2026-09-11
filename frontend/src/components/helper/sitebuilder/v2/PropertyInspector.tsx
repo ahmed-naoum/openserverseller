@@ -253,6 +253,207 @@ export default function PropertyInspector({
               <FieldInput label="Nom de la marque / Titre" type="text" value={content.text} onChange={(v) => onUpdateContent('text', v)} />
             )}
 
+            {/* SITE HEADER — the page's own chrome, compiled with the page */}
+            {type === 'site_header' && (
+              <div className="space-y-4">
+                <FieldInput label="Nom de la marque" type="text" value={content.brandText} onChange={(v) => onUpdateContent('brandText', v)} />
+                <FieldInput label="URL du logo" type="text" value={content.logoUrl} onChange={(v) => onUpdateContent('logoUrl', v)} />
+                <FieldInput label="Hauteur du logo (px)" type="number" value={content.logoHeight} onChange={(v) => onUpdateContent('logoHeight', v)} />
+
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input type="checkbox" checked={content.announcementActive !== false} onChange={(e) => onUpdateContent('announcementActive', e.target.checked)} className="rounded text-orange-500 accent-orange-500" />
+                    Barre d&apos;annonce
+                  </label>
+                  {content.announcementActive !== false && (
+                    <>
+                      <FieldInput label="Texte de l&apos;annonce" type="text" value={content.announcementText} onChange={(v) => onUpdateContent('announcementText', v)} />
+                      <div className="grid grid-cols-2 gap-2">
+                        <FieldInput label="Fond" type="color" value={content.announcementBg} onChange={(v) => onUpdateContent('announcementBg', v)} />
+                        <FieldInput label="Texte" type="color" value={content.announcementColor} onChange={(v) => onUpdateContent('announcementColor', v)} />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h5 className="text-[10px] font-extrabold uppercase text-slate-700">Menu ({(content.links || []).length}/8)</h5>
+                    <button
+                      onClick={() => onUpdateContent('links', [...(content.links || []), { label: 'Nouveau lien', url: '/' }])}
+                      disabled={(content.links || []).length >= 8}
+                      className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-100 hover:bg-indigo-200 disabled:opacity-40 px-2 py-1 rounded-lg transition-all"
+                    >
+                      <Plus className="w-3 h-3" /> Ajouter
+                    </button>
+                  </div>
+                  {(content.links || []).map((link: any, idx: number) => (
+                    <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 relative group">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-500">Lien #{idx + 1}</span>
+                        <button
+                          onClick={() => onUpdateContent('links', content.links.filter((_: any, i: number) => i !== idx))}
+                          className="p-1 text-slate-300 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <FieldInput label="Libellé" type="text" value={link.label} onChange={(v) => {
+                        const next = [...content.links];
+                        next[idx] = { ...next[idx], label: v };
+                        onUpdateContent('links', next);
+                      }} />
+                      <FieldInput label="Destination (/products, #ancre, https://...)" type="text" value={link.url} onChange={(v) => {
+                        const next = [...content.links];
+                        next[idx] = { ...next[idx], url: v };
+                        onUpdateContent('links', next);
+                      }} />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input type="checkbox" checked={content.showCart !== false} onChange={(e) => onUpdateContent('showCart', e.target.checked)} className="rounded text-orange-500 accent-orange-500" />
+                    Icone panier
+                  </label>
+                  {content.showCart !== false && (
+                    <FieldInput label="Lien du panier" type="text" value={content.cartUrl} onChange={(v) => onUpdateContent('cartUrl', v)} />
+                  )}
+                  <FieldInput label="Bouton d&apos;action (vide = masque)" type="text" value={content.ctaText} onChange={(v) => onUpdateContent('ctaText', v)} />
+                  {(content.ctaText || '').trim() && (
+                    <>
+                      <FieldInput label="Destination (vide = descend vers le formulaire)" type="text" value={content.ctaUrl} onChange={(v) => onUpdateContent('ctaUrl', v)} />
+                      <div className="grid grid-cols-2 gap-2">
+                        <FieldInput label="Fond" type="color" value={content.ctaBg} onChange={(v) => onUpdateContent('ctaBg', v)} />
+                        <FieldInput label="Texte" type="color" value={content.ctaColor} onChange={(v) => onUpdateContent('ctaColor', v)} />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    <FieldInput label="Fond" type="color" value={content.bgColor} onChange={(v) => onUpdateContent('bgColor', v)} />
+                    <FieldInput label="Texte" type="color" value={content.textColor} onChange={(v) => onUpdateContent('textColor', v)} />
+                    <FieldInput label="Bordure" type="color" value={content.borderColor} onChange={(v) => onUpdateContent('borderColor', v)} />
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input type="checkbox" checked={content.sticky !== false} onChange={(e) => onUpdateContent('sticky', e.target.checked)} className="rounded text-orange-500 accent-orange-500" />
+                    Rester visible au defilement
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* SITE FOOTER */}
+            {type === 'site_footer' && (
+              <div className="space-y-4">
+                <FieldInput label="Nom de la marque" type="text" value={content.brandText} onChange={(v) => onUpdateContent('brandText', v)} />
+                <FieldInput label="URL du logo" type="text" value={content.logoUrl} onChange={(v) => onUpdateContent('logoUrl', v)} />
+                <FieldInput label="A propos" type="textarea" value={content.about} onChange={(v) => onUpdateContent('about', v)} />
+                <FieldInput label="Badges de confiance (separes par des virgules)" type="text" value={(content.badges || []).join(', ')} onChange={(v) => onUpdateContent('badges', String(v).split(',').map((b: string) => b.trim()).filter(Boolean).slice(0, 4))} />
+
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h5 className="text-[10px] font-extrabold uppercase text-slate-700">Colonnes de liens ({(content.columns || []).length}/4)</h5>
+                    <button
+                      onClick={() => onUpdateContent('columns', [...(content.columns || []), { title: 'Nouvelle colonne', links: [{ label: 'Lien', url: '/' }] }])}
+                      disabled={(content.columns || []).length >= 4}
+                      className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-100 hover:bg-indigo-200 disabled:opacity-40 px-2 py-1 rounded-lg transition-all"
+                    >
+                      <Plus className="w-3 h-3" /> Ajouter
+                    </button>
+                  </div>
+
+                  {(content.columns || []).map((col: any, ci: number) => (
+                    <div key={ci} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 relative group">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-500">Colonne #{ci + 1}</span>
+                        <button
+                          onClick={() => onUpdateContent('columns', content.columns.filter((_: any, i: number) => i !== ci))}
+                          className="p-1 text-slate-300 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <FieldInput label="Titre" type="text" value={col.title} onChange={(v) => {
+                        const next = [...content.columns];
+                        next[ci] = { ...next[ci], title: v };
+                        onUpdateContent('columns', next);
+                      }} />
+
+                      {(col.links || []).map((link: any, li: number) => (
+                        <div key={li} className="pl-3 border-l-2 border-slate-200 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400">Lien #{li + 1}</span>
+                            <button
+                              onClick={() => {
+                                const next = [...content.columns];
+                                next[ci] = { ...next[ci], links: col.links.filter((_: any, i: number) => i !== li) };
+                                onUpdateContent('columns', next);
+                              }}
+                              className="p-1 text-slate-300 hover:text-rose-500"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <FieldInput label="Libellé" type="text" value={link.label} onChange={(v) => {
+                            const next = [...content.columns];
+                            const links = [...col.links];
+                            links[li] = { ...links[li], label: v };
+                            next[ci] = { ...next[ci], links };
+                            onUpdateContent('columns', next);
+                          }} />
+                          <FieldInput label="Destination" type="text" value={link.url} onChange={(v) => {
+                            const next = [...content.columns];
+                            const links = [...col.links];
+                            links[li] = { ...links[li], url: v };
+                            next[ci] = { ...next[ci], links };
+                            onUpdateContent('columns', next);
+                          }} />
+                        </div>
+                      ))}
+
+                      <button
+                        onClick={() => {
+                          const next = [...content.columns];
+                          next[ci] = { ...next[ci], links: [...(col.links || []), { label: 'Nouveau lien', url: '/' }] };
+                          onUpdateContent('columns', next);
+                        }}
+                        disabled={(col.links || []).length >= 8}
+                        className="w-full text-[10px] font-bold text-slate-500 hover:text-indigo-600 disabled:opacity-40 py-1.5 border border-dashed border-slate-300 rounded-lg"
+                      >
+                        + Lien
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <h5 className="text-[10px] font-extrabold uppercase text-slate-700">Reseaux sociaux</h5>
+                  {['instagram', 'facebook', 'tiktok', 'whatsapp'].map((key) => (
+                    <FieldInput
+                      key={key}
+                      label={key.charAt(0).toUpperCase() + key.slice(1)}
+                      type="text"
+                      value={(content.socials || {})[key]}
+                      onChange={(v) => onUpdateContent('socials', { ...(content.socials || {}), [key]: v })}
+                    />
+                  ))}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                  <FieldInput label="Mentions legales" type="text" value={content.copyright} onChange={(v) => onUpdateContent('copyright', v)} />
+                  <FieldInput label="Note (a droite)" type="text" value={content.note} onChange={(v) => onUpdateContent('note', v)} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldInput label="Fond" type="color" value={content.bgColor} onChange={(v) => onUpdateContent('bgColor', v)} />
+                    <FieldInput label="Titres" type="color" value={content.textColor} onChange={(v) => onUpdateContent('textColor', v)} />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* TEXT */}
             {type === 'text' && (
               <>

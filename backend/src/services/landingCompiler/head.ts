@@ -30,6 +30,8 @@ export interface HeadInput {
   rtl: boolean;
   canonical: string | null;
   ogImage: string | null;
+  /** A Google Fonts family to load, already through safeFont. Empty for none. */
+  fontFamily?: string;
 }
 
 /**
@@ -79,13 +81,24 @@ export function pixelRowsForCode(pixels: any[], code: string): any[] {
  * through which pixels reach compiled HTML.
  */
 export function selectActivePixels(pixels: any[], code: string): ActivePixel[] {
-  return pixelRowsForCode(pixels, code)
-    .map((p: any): ActivePixel => ({
-      platform: String(p.platform || 'META').toUpperCase(),
-      pixelId: String(p.pixelId || ''),
-      conversionEvent: String(p.conversionEvent || 'Lead'),
-    }))
-    .filter((p) => p.pixelId);
+  const rows = pixelRowsForCode(pixels, code);
+  const seen = new Set<string>();
+  const result: ActivePixel[] = [];
+
+  for (const p of rows) {
+    const platform = String(p?.platform || 'META').toUpperCase();
+    const pixelId = String(p?.pixelId || '').trim();
+    if (!pixelId) continue;
+    const key = `${platform}:${pixelId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      platform,
+      pixelId,
+      conversionEvent: String(p?.conversionEvent || 'Lead'),
+    });
+  }
+  return result;
 }
 
 /** Verbatim from ReferralForm.getNoScriptUrl — the fallback beacon for JS-less clients. */
@@ -117,7 +130,7 @@ function noscriptUrl(pixel: ActivePixel): string {
  * attributes on nearly every element. Scripts do NOT get it — the inline
  * bootstrap and runtime are allow-listed by hash instead.
  */
-export function buildCsp(pixels: ActivePixel[], scriptHashes: string[]): string {
+export function buildCsp(pixels: ActivePixel[], scriptHashes: string[], opts: { webFont?: boolean } = {}): string {
   const platforms = new Set(pixels.map((p) => p.platform));
 
   const script = ["'self'", ...scriptHashes.map((h) => `'sha256-${h}'`)];
@@ -157,8 +170,10 @@ export function buildCsp(pixels: ActivePixel[], scriptHashes: string[]): string 
     `connect-src ${connect.join(' ')}`,
     "img-src 'self' data: https:",
     "media-src 'self' https:",
-    "style-src 'self' 'unsafe-inline'",
-    "font-src 'self' data:",
+    // A store page with a brand font loads its sheet from Google Fonts and the
+    // files from gstatic; a landing page never does, and its policy is unchanged.
+    opts.webFont ? "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com" : "style-src 'self' 'unsafe-inline'",
+    opts.webFont ? "font-src 'self' data: https://fonts.gstatic.com" : "font-src 'self' data:",
     frame.length ? `frame-src ${frame.join(' ')}` : "frame-src 'none'",
     "form-action 'none'",
     "base-uri 'none'",
@@ -279,60 +294,82 @@ function pixelBootstrap(pixels: ActivePixel[]): string {
     return `(window.__pxq=window.__pxq||[]).push(function(){${body}});`;
   };
 
-  for (const pixel of pixels) {
-    const id = jsonForScript(pixel.pixelId);
+  // Group pixels by platform so vendor SDK loaders execute once and multiple
+  // IDs are registered together without multiplying PageView events or duplicating listeners.
+  const metaPixels = pixels.filter((p) => p.platform === 'META');
+  const googlePixels = pixels.filter((p) => p.platform === 'GOOGLE');
+  const tiktokPixels = pixels.filter((p) => p.platform === 'TIKTOK');
+  const snapPixels = pixels.filter((p) => p.platform === 'SNAPCHAT');
 
-    if (pixel.platform === 'META') {
-      parts.push(
-        `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?` +
-          `n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;` +
-          `n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];` +
-          `t=b.createElement(e);t.async=!0;` +
-          `t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)` +
-          `}` +
-          `(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');` +
-          `fbq('init',${id});fbq('track','PageView');`
-      );
-    } else if (pixel.platform === 'GOOGLE') {
-      parts.push(
-        `(function(){window.dataLayer=window.dataLayer||[];` +
-          `window.gtag=function(){window.dataLayer.push(arguments)};` +
-          `gtag('js',new Date());gtag('config',${id});` +
-          later(
-            `var s=document.createElement('script');s.async=!0;` +
-              `s.src='https://www.googletagmanager.com/gtag/js?id='+encodeURIComponent(${id});` +
-              `document.head.appendChild(s)`
-          ) +
-          `})();`
-      );
-    } else if (pixel.platform === 'TIKTOK') {
-      parts.push(
-        `!function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];` +
-          `ttq.methods=["page","track","identify","instances","debug","on","off","once","ready",` +
-          `"alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"],` +
-          `ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};` +
-          `for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);` +
-          `ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)` +
-          `ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){` +
-          `var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;` +
-          `ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,` +
-          `ttq._o=ttq._o||{},ttq._o[e]=n||{};var s=document.createElement("script");` +
-          `s.type="text/javascript",s.async=!0,s.src=r+"?sdkid="+e+"&lib="+t;` +
-          `var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(s,a)};` +
-          `ttq.load(${id});ttq.page();}(window,document,'ttq');`
-      );
-    } else if (pixel.platform === 'SNAPCHAT') {
-      parts.push(
-        `!function(e,t,n){if(e.snaptr)return;var r=e.snaptr=function(){` +
-          `r.handleRequest?r.handleRequest.apply(r,arguments):r.queue.push(arguments)};r.queue=[];` +
-          later(
-            `var a=t.createElement(n);a.async=!0;a.src="https://sc-static.net/scevent.min.js";` +
-              `var s=t.getElementsByTagName(n)[0];s.parentNode.insertBefore(a,s)`
-          ) +
-          `}` +
-          `(window,document,"script");snaptr('init',${id});snaptr('track','PAGE_VIEW');`
-      );
-    }
+  if (metaPixels.length > 0) {
+    const inits = metaPixels.map((p) => `fbq('init',${jsonForScript(p.pixelId)});`).join('');
+    parts.push(
+      `!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?` +
+        `n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;` +
+        `n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];` +
+        `t=b.createElement(e);t.async=!0;` +
+        `t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)` +
+        `}` +
+        `(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');` +
+        inits +
+        `fbq('track','PageView');`
+    );
+  }
+
+  if (googlePixels.length > 0) {
+    const configs = googlePixels.map((p) => `gtag('config',${jsonForScript(p.pixelId)});`).join('');
+    const scripts = googlePixels
+      .map(
+        (p) =>
+          `var s=document.createElement('script');s.async=!0;` +
+          `s.src='https://www.googletagmanager.com/gtag/js?id='+encodeURIComponent(${jsonForScript(p.pixelId)});` +
+          `document.head.appendChild(s);`
+      )
+      .join('');
+    parts.push(
+      `(function(){window.dataLayer=window.dataLayer||[];` +
+        `window.gtag=function(){window.dataLayer.push(arguments)};` +
+        `gtag('js',new Date());` +
+        configs +
+        later(scripts) +
+        `})();`
+    );
+  }
+
+  if (tiktokPixels.length > 0) {
+    const loads = tiktokPixels.map((p) => `ttq.load(${jsonForScript(p.pixelId)});`).join('');
+    parts.push(
+      `!function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];` +
+        `ttq.methods=["page","track","identify","instances","debug","on","off","once","ready",` +
+        `"alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"],` +
+        `ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};` +
+        `for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);` +
+        `ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)` +
+        `ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){` +
+        `var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;` +
+        `ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,` +
+        `ttq._o=ttq._o||{},ttq._o[e]=n||{};var s=document.createElement("script");` +
+        `s.type="text/javascript",s.async=!0,s.src=r+"?sdkid="+e+"&lib="+t;` +
+        `var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(s,a)};` +
+        loads +
+        `ttq.page();}(window,document,'ttq');`
+    );
+  }
+
+  if (snapPixels.length > 0) {
+    const inits = snapPixels.map((p) => `snaptr('init',${jsonForScript(p.pixelId)});`).join('');
+    parts.push(
+      `!function(e,t,n){if(e.snaptr)return;var r=e.snaptr=function(){` +
+        `r.handleRequest?r.handleRequest.apply(r,arguments):r.queue.push(arguments)};r.queue=[];` +
+        later(
+          `var a=t.createElement(n);a.async=!0;a.src="https://sc-static.net/scevent.min.js";` +
+            `var s=t.getElementsByTagName(n)[0];s.parentNode.insertBefore(a,s)`
+        ) +
+        `}` +
+        `(window,document,"script");` +
+        inits +
+        `snaptr('track','PAGE_VIEW');`
+    );
   }
 
   if (deferred) parts.push(pixelDrain(terminalBeacons(pixels)));
@@ -408,6 +445,13 @@ export function renderHead(input: HeadInput): string {
         : '';
       parts.push(`<link rel="preload" as="image" href="${esc(url)}"${srcset} fetchpriority="high">`);
     }
+  }
+
+  if (input.fontFamily) {
+    const family = encodeURIComponent(input.fontFamily).replace(/%20/g, '+');
+    parts.push('<link rel="preconnect" href="https://fonts.googleapis.com">');
+    parts.push('<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>');
+    parts.push(`<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${family}:wght@400;500;700;800;900&display=swap">`);
   }
 
   parts.push(`<style>${input.css}</style>`);

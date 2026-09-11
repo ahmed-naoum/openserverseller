@@ -19,8 +19,16 @@ import { fetchMaintenanceSettings } from '../middleware/maintenance.js';
 import { generateContractPdf } from '../services/contract.service.js';
 import * as damanesign from '../services/damanesign.service.js';
 import { parseCookies } from '../middleware/security.js';
+import { emitSessionEnded } from '../lib/realtime.js';
 import { sendOtpEmail, verifyTurnstile } from '../services/email.service.js';
 import { getSecret } from '../lib/secretStore.js';
+import {
+  normalizeStoreName,
+  validateStoreName,
+  resolveStoreName,
+  displayNameFromStoreName,
+} from '../utils/storeName.js';
+import { provisionStoreForUser, syncStoreNameWithSubdomain } from '../services/store.service.js';
 
 // Built per request rather than at module load: the client id can be changed
 // from the admin dashboard, and this module is imported before loadSecrets().
@@ -73,7 +81,7 @@ const getGeoLocation = async (ip: string): Promise<string | null> => {
 
 const generateTokens = (userId: string) => {
   const accessToken = jwt.sign(
-    { userId },
+    { userId, type: 'access' },
     process.env.JWT_SECRET as string,
     { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any }
   );
@@ -152,6 +160,14 @@ router.post(
       if (/[0-9]/.test(value)) throw new Error('Full name must not contain numbers');
       return true;
     }),
+    // The store name is the subdomain the storefront will answer on. It is
+    // collected here, at sign-up, so the account is created with its store
+    // already standing rather than half-provisioned until the seller returns.
+    body('storeName').custom((value) => {
+      const verdict = validateStoreName(value);
+      if (!verdict.ok) throw new Error(verdict.message);
+      return true;
+    }),
     body('turnstileToken').notEmpty().withMessage('CAPTCHA verification is required'),
     body('cguAccepted').custom((value) => value === true || value === 'true' || value === 1 || value === '1').withMessage("Veuillez accepter les Conditions Générales d'Utilisation (CGU)"),
     body('sellingOnline').optional().isString(),
@@ -189,6 +205,7 @@ router.post(
       partnerPriorities, interviewAvailability, additionalNotes
     } = req.body;
     const role = 'VENDOR'; // Hardcoded — only VENDOR can register via this route
+    const storeName = normalizeStoreName(req.body.storeName);
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
     const langCode = ['en', 'fr', 'ar'].includes(language) ? language : 'ar';
 
@@ -219,6 +236,15 @@ router.post(
           : 'Ce numero de telephone est deja utilise par un autre compte',
         [{ path: isEmailTaken ? 'email' : 'phone', msg: isEmailTaken ? 'email_already_exists' : 'phone_already_exists' }]
       );
+    }
+
+    // Named like the email/phone collisions above so the client flags the exact
+    // input and walks the user back to the step that owns it.
+    const storeNameVerdict = await resolveStoreName(storeName);
+    if (!storeNameVerdict.ok) {
+      throw new AppException(409, storeNameVerdict.message, [
+        { path: 'storeName', msg: storeNameVerdict.message },
+      ]);
     }
 
     const hashedPassword = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10));
@@ -257,6 +283,7 @@ router.post(
           password: hashedPassword,
           roleId: userRole.id,
           isInfluencer: false,
+          subdomain: storeNameVerdict.value,
           kycStatus: 'PENDING',
           isActive: false,
           cguAccepted: true,
@@ -297,9 +324,29 @@ router.post(
       })) as any;
     } catch (error: any) {
       if (error.code === 'P2002') {
+        // `subdomain` is unique too, so two people claiming the same store name
+        // in the same second land here. Say which field lost the race.
+        const target = String((error.meta as any)?.target ?? '');
+        if (target.includes('subdomain')) {
+          throw new AppException(409, 'Ce nom de boutique est deja pris', [
+            { path: 'storeName', msg: 'Ce nom de boutique est deja pris' },
+          ]);
+        }
         throw new AppException(409, 'User already exists with this email or phone (caught race condition)');
       }
       throw error;
+    }
+
+    // The storefront exists from the first second of the account. Seeding it is
+    // not worth losing a completed registration over: a failure here leaves the
+    // lazy `getOrCreateVendorStore` path to build it on first use.
+    try {
+      await provisionStoreForUser(user.id, {
+        slug: storeNameVerdict.value,
+        name: displayNameFromStoreName(storeNameVerdict.value),
+      });
+    } catch (storeError) {
+      console.error(`[REGISTER] Store provisioning failed for user ${user.id}:`, storeError);
     }
 
     // Referral Link helper assignment
@@ -411,6 +458,7 @@ router.post(
           role: user.role.name,
           kycStatus: user.kycStatus,
           isActive: user.isActive,
+          subdomain: user.subdomain,
           emailVerified: !!user.emailVerifiedAt,
           emailVerifiedAt: user.emailVerifiedAt,
         },
@@ -455,6 +503,13 @@ router.post(
     body('xUsername').optional().trim(),
     body('youtubeUsername').optional().trim(),
     body('snapchatUsername').optional().trim(),
+    // Same rule as the seller form: a creator gets a storefront on their own
+    // subdomain from day one, not a landing-page-only account.
+    body('storeName').custom((value) => {
+      const verdict = validateStoreName(value);
+      if (!verdict.ok) throw new Error(verdict.message);
+      return true;
+    }),
     body('turnstileToken').notEmpty().withMessage('CAPTCHA verification is required'),
     body('cguAccepted').custom((value) => value === true || value === 'true' || value === 1 || value === '1').withMessage("Veuillez accepter les Conditions Générales d'Utilisation (CGU)"),
     body('followersCount').optional().isString(),
@@ -484,6 +539,7 @@ router.post(
       instagramUrl, tiktokUrl, facebookUrl, youtubeUrl, snapchatUrl, language = 'ar',
       followersCount, contentType, hasPriorExperience, desiredProductTypes, initialBudget, motivation
     } = req.body;
+    const storeName = normalizeStoreName(req.body.storeName);
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : undefined;
     const langCode = ['en', 'fr', 'ar'].includes(language) ? language : 'ar';
 
@@ -515,6 +571,13 @@ router.post(
           : 'Ce numero de telephone est deja utilise par un autre compte',
         [{ path: isEmailTaken ? 'email' : 'phone', msg: isEmailTaken ? 'email_already_exists' : 'phone_already_exists' }]
       );
+    }
+
+    const storeNameVerdict = await resolveStoreName(storeName);
+    if (!storeNameVerdict.ok) {
+      throw new AppException(409, storeNameVerdict.message, [
+        { path: 'storeName', msg: storeNameVerdict.message },
+      ]);
     }
 
     // Manual verification fallback. Skip automated scraping.
@@ -562,6 +625,7 @@ router.post(
           password: hashedPassword,
           roleId: influencerRole.id,
           isInfluencer: true,
+          subdomain: storeNameVerdict.value,
           referralCode: uuidv4().slice(0, 8).toUpperCase(),
           kycStatus: 'PENDING', // Needs admin approval
           isActive: false,
@@ -610,9 +674,26 @@ router.post(
       })) as any;
     } catch (error: any) {
       if (error.code === 'P2002') {
+        const target = String((error.meta as any)?.target ?? '');
+        if (target.includes('subdomain')) {
+          throw new AppException(409, 'Ce nom de boutique est deja pris', [
+            { path: 'storeName', msg: 'Ce nom de boutique est deja pris' },
+          ]);
+        }
         throw new AppException(409, 'User already exists with this email or phone (caught race condition)');
       }
       throw error;
+    }
+
+    // Same as the seller path: build the storefront now, and never fail a
+    // completed registration because seeding it did not go through.
+    try {
+      await provisionStoreForUser(user.id, {
+        slug: storeNameVerdict.value,
+        name: displayNameFromStoreName(storeNameVerdict.value),
+      });
+    } catch (storeError) {
+      console.error(`[REGISTER] Store provisioning failed for influencer ${user.id}:`, storeError);
     }
 
     // Auto-assign global agents
@@ -721,6 +802,7 @@ router.post(
           role: user.role?.name,
           kycStatus: user.kycStatus,
           isActive: user.isActive,
+          subdomain: user.subdomain,
           emailVerified: !!user.emailVerifiedAt,
           emailVerifiedAt: user.emailVerifiedAt,
         },
@@ -1225,7 +1307,9 @@ router.post(
       throw new AppException(404, "Votre compte n'existe pas. Veuillez d'abord créer un compte sur la page d'inscription.");
     }
 
-    if (!phone) {
+    // The completion form asks for the store name alongside the phone, so a
+    // Google sign-up reaches user creation with both or neither.
+    if (!phone || !req.body.storeName) {
       return res.status(200).json({
         status: 'success',
         data: {
@@ -1249,6 +1333,13 @@ router.post(
     });
     if (existingPhone) {
       throw new AppException(409, 'Ce numéro de téléphone est déjà associé à un autre compte');
+    }
+
+    const storeNameVerdict = await resolveStoreName(req.body.storeName);
+    if (!storeNameVerdict.ok) {
+      throw new AppException(409, storeNameVerdict.message, [
+        { path: 'storeName', msg: storeNameVerdict.message },
+      ]);
     }
 
     const userRole = await prisma.role.findUnique({
@@ -1287,6 +1378,7 @@ router.post(
         password: await bcrypt.hash(uuidv4(), 10),
         roleId: userRole.id,
         isInfluencer: role === 'INFLUENCER',
+        subdomain: storeNameVerdict.value,
         referralCode: role === 'INFLUENCER' ? uuidv4().slice(0, 8).toUpperCase() : null,
         kycStatus: 'PENDING',
         isActive: false, 
@@ -1346,6 +1438,15 @@ router.post(
       } as any,
       include: { profile: true, role: true },
     });
+
+    try {
+      await provisionStoreForUser(user.id, {
+        slug: storeNameVerdict.value,
+        name: displayNameFromStoreName(storeNameVerdict.value),
+      });
+    } catch (storeError) {
+      console.error(`[GOOGLE] Store provisioning failed for user ${user.id}:`, storeError);
+    }
 
     // Auto-assign new user to helpers with autoAssignHelperUsers/vendors/influencers enabled
     const isVendor = user.role.name === 'VENDOR';
@@ -1469,7 +1570,7 @@ router.post(
     // Generate tokens for the target user with isImpersonated claim
     const jwt = require('jsonwebtoken');
     const accessToken = jwt.sign(
-      { userId: targetUser.uuid, isImpersonated: true },
+      { userId: targetUser.uuid, type: 'access', isImpersonated: true },
       process.env.JWT_SECRET as string,
       { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any }
     );
@@ -2707,11 +2808,20 @@ router.post(
 router.post(
   '/logout',
   authenticate,
-  asyncHandler(async (_req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     res.clearCookie('token', { path: '/' });
     res.clearCookie('refreshToken', { path: '/' });
     res.clearCookie('originalToken', { path: '/' });
     res.clearCookie('originalRefreshToken', { path: '/' });
+
+    // Reach the user's OTHER devices. The tabs of the browser that made this
+    // request sync among themselves over a BroadcastChannel without us, but a
+    // phone or a second machine left open on the dashboard only finds out when
+    // it asks the server something — which is the stale-session confusion this
+    // closes. Emitted after the cookies are cleared and never awaited: a socket
+    // that is not there must not fail the logout.
+    emitSessionEnded({ userId: req.user?.id, userUuid: req.user?.uuid }, 'revoked');
+
     res.json({
       status: 'success',
       message: 'Logged out successfully',
@@ -2920,54 +3030,47 @@ router.delete(
   })
 );
 
-const RESERVED_SUBDOMAINS = [
-  'admin', 'api', 'www', 'app', 'mail', 'blog', 'cdn', 'static',
-  'support', 'help', 'helper', 'auth', 'login', 'register', 'root',
-  'status', 'portal', 'billing', 'pay', 'checkout', 'shop', 'store',
-  'dev', 'test', 'prod', 'localhost', 'system', 'secure', 'web',
-  'damanesign', 'youcan', 'silacod', 'silacod-dev', 'custom'
-];
+// Availability probes are cheap but enumerable — one existence bit per call.
+// Loose enough for the debounced keystroke check on the sign-up form, tight
+// enough that scraping the whole namespace is not worth anyone's time.
+const storeNameLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { status: 'error', message: 'Trop de vérifications, réessayez dans un instant' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * The same probe as `/check-subdomain`, minus the login.
+ *
+ * The store name is now chosen ON the registration form, before any account
+ * exists, so the availability check there has no token to send. Same rules, same
+ * answers — it just cannot exclude "the current user" because there isn't one.
+ */
+router.get(
+  '/store-name/available',
+  storeNameLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const verdict = await resolveStoreName(req.query.name);
+    return res.json({
+      available: verdict.ok,
+      reason: verdict.reason,
+      message: verdict.ok ? 'Ce nom de boutique est disponible' : verdict.message,
+    });
+  })
+);
 
 router.get(
   '/check-subdomain',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
-    const { name } = req.query;
-    if (!name || typeof name !== 'string') {
-      return res.json({ available: false, message: 'Nom invalide' });
-    }
-
-    const subdomain = name.trim().toLowerCase();
-    if (subdomain.length < 3 || subdomain.length > 30) {
-      return res.json({ available: false, message: 'Le sous-domaine doit contenir entre 3 et 30 caractères' });
-    }
-
-    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(subdomain)) {
-      return res.json({ available: false, message: 'Le sous-domaine ne doit contenir que des lettres minuscules, chiffres et tirets, sans tirets consécutifs ou aux extrémités' });
-    }
-
-    if (RESERVED_SUBDOMAINS.includes(subdomain)) {
-      return res.json({ available: false, message: 'Ce nom de sous-domaine est réservé' });
-    }
-
-    const { containsBlockedWord } = await import('../utils/blockedWords.js');
-    if (containsBlockedWord(subdomain)) {
-      return res.json({ available: false, message: 'Ce sous-domaine contient un mot interdit' });
-    }
-
-    // Check if another user already has this subdomain
-    const existing = await prisma.user.findFirst({
-      where: {
-        subdomain,
-        NOT: { id: req.user!.id }
-      }
+    const verdict = await resolveStoreName(req.query.name, req.user!.id);
+    return res.json({
+      available: verdict.ok,
+      reason: verdict.reason,
+      message: verdict.ok ? 'Ce sous-domaine est disponible' : verdict.message,
     });
-
-    if (existing) {
-      return res.json({ available: false, message: 'Ce sous-domaine est déjà pris' });
-    }
-
-    return res.json({ available: true, message: 'Ce sous-domaine est disponible' });
   })
 );
 
@@ -2983,41 +3086,21 @@ router.post(
       throw new AppException(400, 'Format de sous-domaine invalide');
     }
 
-    const subdomain = req.body.subdomain.trim().toLowerCase();
-    if (subdomain.length < 3 || subdomain.length > 30) {
-      throw new AppException(400, 'Le sous-domaine doit contenir entre 3 et 30 caractères');
+    const verdict = await resolveStoreName(req.body.subdomain, req.user!.id);
+    if (!verdict.ok) {
+      throw new AppException(400, verdict.message);
     }
-
-    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(subdomain)) {
-      throw new AppException(400, 'Format invalide (lettres minuscules, chiffres et tirets uniquement)');
-    }
-
-    if (RESERVED_SUBDOMAINS.includes(subdomain)) {
-      throw new AppException(400, 'Ce nom de sous-domaine est réservé');
-    }
-
-    const { containsBlockedWord } = await import('../utils/blockedWords.js');
-    if (containsBlockedWord(subdomain)) {
-      throw new AppException(400, 'Ce sous-domaine contient un mot interdit');
-    }
-
-    // Check uniqueness
-    const existing = await prisma.user.findFirst({
-      where: {
-        subdomain,
-        NOT: { id: req.user!.id }
-      }
-    });
-
-    if (existing) {
-      throw new AppException(400, 'Ce sous-domaine est déjà pris');
-    }
+    const subdomain = verdict.value;
 
     // Save
     await prisma.user.update({
       where: { id: req.user!.id },
       data: { subdomain }
     });
+
+    // The name is the storefront's address, so the store moves with it —
+    // provisioning one here for an account that somehow has none.
+    await syncStoreNameWithSubdomain(req.user!.id, subdomain);
 
     // Check and activate user since subdomain is now set (Step 1)
     await checkAndActivateUser(req.user!.id);
@@ -3109,10 +3192,9 @@ router.post(
       .trim()
       .toLowerCase()
       .custom((value) => {
-        const cleaned = value.trim().toLowerCase();
-        const regex = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-        if (!regex.test(cleaned) || cleaned.length < 3 || cleaned.length > 30) {
-          throw new Error('Only lowercase letters, numbers, and hyphens are allowed (3-30 chars).');
+        const verdict = validateStoreName(value);
+        if (!verdict.ok) {
+          throw new Error(verdict.message);
         }
         return true;
       }),
@@ -3123,20 +3205,10 @@ router.post(
       throw new AppException(400, errors.array()[0].msg, errors.array());
     }
 
-    const { subdomain } = req.body;
-    const cleanedSubdomain = subdomain.trim().toLowerCase();
     const userId = req.user!.id;
-
-    // Check if the subdomain is already taken by another user
-    const existing = await prisma.user.findFirst({
-      where: {
-        subdomain: cleanedSubdomain,
-        NOT: { id: userId }
-      }
-    });
-
-    if (existing) {
-      throw new AppException(400, 'This subdomain is already taken. Please try another.');
+    const verdict = await resolveStoreName(req.body.subdomain, userId);
+    if (!verdict.ok) {
+      throw new AppException(400, verdict.message);
     }
 
     // Generate and save OTP
@@ -3190,8 +3262,8 @@ router.post(
       throw new AppException(400, errors.array()[0].msg, errors.array());
     }
 
-    const { subdomain, otp } = req.body;
-    const cleanedSubdomain = subdomain.trim().toLowerCase();
+    const { otp } = req.body;
+    const cleanedSubdomain = normalizeStoreName(req.body.subdomain);
     const userId = req.user!.id;
 
     // Verify user otp
@@ -3215,32 +3287,30 @@ router.post(
       throw new AppException(400, 'Invalid verification code.');
     }
 
-    // Double check if the subdomain has been taken in the meantime
-    const existing = await prisma.user.findFirst({
-      where: {
-        subdomain: cleanedSubdomain,
-        NOT: { id: userId }
-      }
-    });
-
-    if (existing) {
-      throw new AppException(400, 'This subdomain is already taken. Please try another.');
+    // Re-check shape and availability: the name was validated when the code was
+    // sent, but that was minutes ago and someone else may have claimed it since.
+    const verdict = await resolveStoreName(cleanedSubdomain, userId);
+    if (!verdict.ok) {
+      throw new AppException(400, verdict.message);
     }
 
     // Update user subdomain
     await prisma.user.update({
       where: { id: userId },
       data: {
-        subdomain: cleanedSubdomain,
+        subdomain: verdict.value,
         emailOtp: null,
         emailOtpExpiry: null
       } as any
     });
 
+    // The storefront answers on this name — move it too.
+    await syncStoreNameWithSubdomain(userId, verdict.value);
+
     res.json({
       status: 'success',
       message: 'Subdomain updated successfully!',
-      data: { subdomain: cleanedSubdomain }
+      data: { subdomain: verdict.value }
     });
   })
 );

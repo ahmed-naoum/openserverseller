@@ -2,7 +2,8 @@ import { useState, useEffect, lazy, Suspense, type ReactNode } from 'react';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import MaintenanceGuard from './components/MaintenanceGuard';
 import PageLoader from './components/PageLoader';
-import toast, { Toaster } from 'react-hot-toast';
+import { SweetAlertHost } from './components/ui/SweetAlert';
+import { ToastStack } from './components/ui/Toast';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -16,6 +17,7 @@ import VendorProducts from './pages/vendor/Products';
 import VendorLeads from './pages/vendor/Leads';
 
 import VendorInventory from './pages/vendor/Inventory';
+import VendorAbandonedCarts from './pages/vendor/AbandonedCarts';
 import VendorSubAccounts from './pages/vendor/SubAccounts';
 import AgentDashboard from './pages/agent/Dashboard';
 import AgentStatistics from './pages/agent/Statistics';
@@ -48,6 +50,7 @@ import AdminInvoices from './pages/admin/Invoices';
 import ActivityLogs from './pages/admin/ActivityLogs';
 import BackupManager from './pages/admin/BackupManager';
 import CallCenterInspector from './pages/admin/CallCenterInspector';
+import CallCenterAnalytics from './pages/admin/CallCenterAnalytics';
 import InfluencerInspector from './pages/admin/InfluencerInspector';
 import SupportInspector from './pages/admin/SupportInspector';
 import LiveStreamInspector from './pages/admin/LiveStreamInspector';
@@ -108,6 +111,7 @@ import HelperLinks from './pages/helper/Links';
 import HelperAffiliate from './pages/helper/HelperAffiliate';
 import AdminHelpersAffiliate from './pages/admin/AdminHelpersAffiliate';
 import SiteBuilder from './pages/helper/SiteBuilder';
+import StudioPage from './studio/StudioPage';
 import HelperScanner from './pages/helper/Scanner';
 import Chat from './pages/common/Chat';
 import AccountVerification from './pages/verify/AccountVerification';
@@ -141,6 +145,29 @@ import BlockedPage from './pages/common/BlockedPage';
 import { AuthProvider } from './contexts/AuthContext';
 import { SocketProvider } from './contexts/SocketContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { StoreProvider, detectStoreHost, useStore } from './contexts/StoreContext';
+import { CartProvider } from './contexts/CartContext';
+
+// Storefront Pages
+import StoreLayout from './pages/store/StoreLayout';
+import StoreHomePage from './pages/store/StoreHomePage';
+import StoreProductsPage from './pages/store/StoreProductsPage';
+import StoreCollectionPage from './pages/store/StoreCollectionPage';
+import StoreProductDetailPage from './pages/store/StoreProductDetailPage';
+import StoreCartPage from './pages/store/StoreCartPage';
+import StoreCheckoutPage from './pages/store/StoreCheckoutPage';
+import StoreThankYouPage from './pages/store/StoreThankYouPage';
+import StoreCustomPage from './pages/store/StoreCustomPage';
+
+// Vendor Store Pages
+import StoreOverview from './pages/vendor/store/StoreOverview';
+import StoreSettings from './pages/vendor/store/StoreSettings';
+import StoreThemeEditor from './pages/vendor/store/StoreThemeEditor';
+import StoreThemes from './pages/vendor/store/StoreThemes';
+import StoreCollections from './pages/vendor/store/StoreCollections';
+import StoreProducts from './pages/vendor/store/StoreProducts';
+import StoreCategories from './pages/vendor/store/StoreCategories';
+import StorePagesManager from './pages/vendor/store/StorePagesManager';
 
 // Guards
 import RoleGuard from './components/auth/RoleGuard';
@@ -276,7 +303,6 @@ function shouldShowPublicLogoLoader(pathname: string): boolean {
 }
 
 function App() {
-  const location = useLocation();
   const [loading, setLoading] = useState(() => shouldShowPublicLogoLoader(window.location.pathname));
 
   useEffect(() => {
@@ -330,6 +356,140 @@ function App() {
       });
   }, []);
 
+  // A host that MIGHT be a storefront. Whether it actually is one is the
+  // server's answer, not this function's — StorefrontGate below waits for it.
+  const storeHostCandidate = detectStoreHost().isStore;
+
+  if (storeHostCandidate) {
+    return (
+      <>
+        <ScrollToTop />
+        <AuthProvider>
+          <StoreProvider>
+            <CartProvider>
+              <StorefrontGate platform={<PlatformApp loading={loading} setLoading={setLoading} />}>
+              <Routes>
+                {/* Landing pages own their chrome.
+
+                    These deliberately sit OUTSIDE <StoreLayout>. A page built
+                    in the builder carries its own site_header / site_footer
+                    blocks, which the compiler renders into the static HTML a
+                    visitor actually receives. Wrapping the React storefront
+                    header and footer around it here produced a second set of
+                    chrome in the SPA fallback that the compiled page does not
+                    have — two different pages behind one URL, and the React
+                    one paying for the whole app bundle before it could paint. */}
+                <Route
+                  path="r/:code"
+                  element={
+                    <Suspense
+                      fallback={
+                        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                          <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      }
+                    >
+                      <ReferralForm />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="r/:code/thank-you"
+                  element={
+                    <Suspense
+                      fallback={
+                        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                          <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      }
+                    >
+                      <ReferralThankYouPage />
+                    </Suspense>
+                  }
+                />
+                <Route element={<StoreLayout />}>
+                  <Route index element={<StoreHomePage />} />
+                  <Route path="products" element={<StoreProductsPage />} />
+                  <Route path="collections/:slug" element={<StoreCollectionPage />} />
+                  <Route path="p/:slug" element={<StoreProductDetailPage />} />
+                  <Route path="products/:slug" element={<StoreProductDetailPage />} />
+                  <Route path="product/:slug" element={<StoreProductDetailPage />} />
+                  <Route path="cart" element={<StoreCartPage />} />
+                  <Route path="checkout" element={<StoreCheckoutPage />} />
+                  <Route path="order-confirmed" element={<StoreThankYouPage />} />
+                  <Route path="thank-you" element={<StoreThankYouPage />} />
+                  <Route path="pages/:slug" element={<StoreCustomPage />} />
+                  {/* A real not-found, inside the shop's own chrome. The
+                      catch-all used to render the home page, so every mistyped
+                      or dead URL on a seller's domain answered 200 with the
+                      shop front — invisible to the seller and to search. */}
+                  <Route path="*" element={<StoreNotFound />} />
+                </Route>
+              </Routes>
+              </StorefrontGate>
+            </CartProvider>
+          </StoreProvider>
+        </AuthProvider>
+      </>
+    );
+  }
+
+  return <PlatformApp loading={loading} setLoading={setLoading} />;
+}
+
+/**
+ * Holds the storefront back until the server has confirmed there is a shop on
+ * this domain.
+ *
+ * Three outcomes. Resolved: the storefront renders. Still resolving: a neutral
+ * splash, because painting either tree and swapping it is a flash of the wrong
+ * site. Unresolved: the platform renders instead — a staging host, a subdomain
+ * whose owner has no store, or a domain pointed here by mistake is not a shop,
+ * and answering with an empty shop front taught visitors nothing and hid the
+ * misconfiguration from the seller.
+ *
+ * The platform fallback is also what keeps sign-in reachable: a seller who
+ * types their own subdomain and has no store still lands on the real site.
+ */
+function StorefrontGate({ children, platform }: { children: React.ReactNode; platform: React.ReactNode }) {
+  const { isStorefront, loading } = useStore();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="w-8 h-8 border-3 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return <>{isStorefront ? children : platform}</>;
+}
+
+/** The shop's own 404, with a way back into the catalogue. */
+function StoreNotFound() {
+  const { store } = useStore();
+  return (
+    <div className="max-w-xl mx-auto px-4 py-24 text-center space-y-4">
+      <p className="text-5xl font-black text-gray-900">404</p>
+      <h1 className="text-xl font-bold text-gray-900">Cette page n'existe pas</h1>
+      <p className="text-sm text-gray-600">
+        Le lien que vous avez suivi est introuvable{store?.name ? ` sur ${store.name}` : ''}.
+      </p>
+      <a
+        href="/products"
+        className="inline-block px-5 py-2.5 rounded-xl text-sm font-bold text-white"
+        style={{ background: store?.primaryColor || '#f97316' }}
+      >
+        Voir la boutique
+      </a>
+    </div>
+  );
+}
+
+/** The platform: marketing site, sign-in and every dashboard. */
+function PlatformApp({ loading, setLoading }: { loading: boolean; setLoading: (v: boolean) => void }) {
+  const location = useLocation();
+
   return (
     <>
       <ScrollToTop />
@@ -340,12 +500,12 @@ function App() {
       )}
     <AuthProvider>
       <LanguageProvider>
-      <SocketProvider>
-        <LiveSessionTracker />
-        <MaintenanceGuard>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/maintenance" element={<MaintenancePage />} />
+          <SocketProvider>
+            <LiveSessionTracker />
+            <MaintenanceGuard>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/maintenance" element={<MaintenancePage />} />
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<UnauthGuard><LoginPage /></UnauthGuard>} />
           <Route path="/register" element={<UnauthGuard><RegisterPage /></UnauthGuard>} />
@@ -524,6 +684,7 @@ function App() {
           <Route path="wallet" element={<UserWallet />} />
           <Route path="sub-accounts" element={<VendorSubAccounts />} />
           <Route path="inventory" element={<VendorInventory />} />
+          <Route path="abandoned-carts" element={<VendorAbandonedCarts />} />
           <Route path="marketplace" element={
             <Suspense fallback={
               <div className="min-h-[400px] flex items-center justify-center p-8">
@@ -542,6 +703,17 @@ function App() {
           <Route path="pixels/tiktok" element={<UserPixels platform="TIKTOK" />} />
           <Route path="pixels/snapchat" element={<UserPixels platform="SNAPCHAT" />} />
           <Route path="domains" element={<VendorDomains />} />
+          {/* Vendor Store Management */}
+          <Route path="store" element={<StoreOverview />} />
+          <Route path="store/settings" element={<StoreSettings />} />
+          <Route path="store/theme" element={<StoreThemeEditor />} />
+          <Route path="store/themes" element={<StoreThemes />} />
+          {/* The shop catalogue. Separate from "products" above, which is the
+              marketplace list referral links and landing pages are built from. */}
+          <Route path="store/products" element={<StoreProducts />} />
+          <Route path="store/categories" element={<StoreCategories />} />
+          <Route path="store/collections" element={<StoreCollections />} />
+          <Route path="store/pages" element={<StorePagesManager />} />
           <Route path="links" element={<InfluencerLinks />} />
           <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="whatsapp-agent" element={
@@ -590,6 +762,7 @@ function App() {
             <Route path="sheet-credits" element={<SheetCreditsHistory />} />
             <Route path="wallet" element={<UserWallet />} />
             <Route path="inventory" element={<VendorInventory />} />
+            <Route path="abandoned-carts" element={<VendorAbandonedCarts />} />
             <Route path="marketplace" element={
               <Suspense fallback={
                 <div className="min-h-[400px] flex items-center justify-center p-8">
@@ -677,6 +850,41 @@ function App() {
             <SiteBuilder />
           </RoleGuard>
         } />
+
+        {/* Studio: the tree editor, same guards as the flat builder it succeeds.
+            One path per dashboard so "back" returns to the right links list. */}
+        {['/helper', '/dashboard', '/influencer', '/admin'].map((base) => (
+          <Route key={base} path={`${base}/links/:id/studio`} element={
+            <RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER', 'VENDOR', 'INFLUENCER']}>
+              <StudioPage />
+            </RoleGuard>
+          } />
+        ))}
+        <Route path={`${VENDOR_HELPER_BASE}/links/:id/studio`} element={
+          <RoleGuard allowedRoles={['VENDOR_HELPER']}>
+            <SubAccountGuard />
+          </RoleGuard>
+        }>
+          <Route index element={<StudioPage />} />
+        </Route>
+
+        {/* Studio on the store's own pages: the home page and each custom page. */}
+        {['/dashboard/store/studio/home', '/dashboard/store/studio/header', '/dashboard/store/studio/footer', '/dashboard/store/studio/product', '/dashboard/store/studio/catalogue', '/dashboard/store/studio/pages/:pageId'].map((path) => (
+          <Route key={path} path={path} element={
+            <RoleGuard allowedRoles={['SUPER_ADMIN', 'VENDOR', 'INFLUENCER']}>
+              <StudioPage />
+            </RoleGuard>
+          } />
+        ))}
+        {[`${VENDOR_HELPER_BASE}/store/studio/home`, `${VENDOR_HELPER_BASE}/store/studio/header`, `${VENDOR_HELPER_BASE}/store/studio/footer`, `${VENDOR_HELPER_BASE}/store/studio/product`, `${VENDOR_HELPER_BASE}/store/studio/catalogue`, `${VENDOR_HELPER_BASE}/store/studio/pages/:pageId`].map((path) => (
+          <Route key={path} path={path} element={
+            <RoleGuard allowedRoles={['VENDOR_HELPER']}>
+              <SubAccountGuard />
+            </RoleGuard>
+          }>
+            <Route index element={<StudioPage />} />
+          </Route>
+        ))}
 
         {/* Helper Routes */}
         <Route path="/helper" element={<RoleGuard allowedRoles={['SUPER_ADMIN', 'HELPER']}><DashboardLayout /></RoleGuard>}>
@@ -771,6 +979,7 @@ function App() {
             </RoleGuard>
           } />
           <Route path="call-center-inspector" element={<CallCenterInspector />} />
+          <Route path="call-center-analytics" element={<CallCenterAnalytics />} />
           <Route path="influencer-inspector" element={<InfluencerInspector />} />
           <Route path="support-inspector" element={<SupportInspector />} />
           <Route path="contact-messages" element={<ContactMessages />} />
@@ -791,157 +1000,10 @@ function App() {
       </SocketProvider>
 
 
-      <Toaster
-        position="top-right"
-        containerStyle={{ top: 20, right: 20 }}
-        gutter={10}
-        toastOptions={{
-          duration: 4000,
-          style: {
-            padding: 0,
-            background: 'transparent',
-            boxShadow: 'none',
-          },
-        }}
-      >
-        {(t) => {
-          const isSuccess = t.type === 'success';
-          const isError = t.type === 'error';
-          const isLoading = t.type === 'loading';
-
-          const bgColor = isSuccess
-            ? 'rgba(16, 185, 129, 0.95)'
-            : isError
-            ? 'rgba(239, 68, 68, 0.95)'
-            : isLoading
-            ? 'rgba(59, 130, 246, 0.95)'
-            : 'rgba(30, 30, 30, 0.95)';
-
-          const glowColor = isSuccess
-            ? '0 8px 32px rgba(16, 185, 129, 0.3), 0 2px 8px rgba(16, 185, 129, 0.2)'
-            : isError
-            ? '0 8px 32px rgba(239, 68, 68, 0.3), 0 2px 8px rgba(239, 68, 68, 0.2)'
-            : isLoading
-            ? '0 8px 32px rgba(59, 130, 246, 0.3), 0 2px 8px rgba(59, 130, 246, 0.2)'
-            : '0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.15)';
-
-          return (
-            <div
-              role="alert"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '14px 18px',
-                borderRadius: '14px',
-                background: bgColor,
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                boxShadow: glowColor,
-                color: '#fff',
-                fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-                fontSize: '14px',
-                fontWeight: 500,
-                lineHeight: 1.4,
-                maxWidth: '420px',
-                minWidth: '300px',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                position: 'relative',
-                overflow: 'hidden',
-                transform: t.visible ? 'translateX(0)' : 'translateX(120%)',
-                opacity: t.visible ? 1 : 0,
-                transition: 'all 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
-              }}
-            >
-              {/* Animated Icon */}
-              <div
-                style={{
-                  flexShrink: 0,
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  background: 'rgba(255, 255, 255, 0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {isSuccess && (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" style={{ strokeDasharray: 30, strokeDashoffset: t.visible ? 0 : 30, transition: 'stroke-dashoffset 0.5s ease 0.2s' }} />
-                  </svg>
-                )}
-                {isError && (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" style={{ strokeDasharray: 20, strokeDashoffset: t.visible ? 0 : 20, transition: 'stroke-dashoffset 0.4s ease 0.15s' }} />
-                    <line x1="6" y1="6" x2="18" y2="18" style={{ strokeDasharray: 20, strokeDashoffset: t.visible ? 0 : 20, transition: 'stroke-dashoffset 0.4s ease 0.3s' }} />
-                  </svg>
-                )}
-                {isLoading && (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                  </svg>
-                )}
-                {!isSuccess && !isError && !isLoading && (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                )}
-              </div>
-
-              {/* Message */}
-              <div style={{ flex: 1, letterSpacing: '0.01em' }}>
-                {typeof t.message === 'function' ? t.message(t) : t.message}
-              </div>
-
-              {/* Close button */}
-              {!isLoading && (
-                <button
-                  onClick={() => toast.dismiss(t.id)}
-                  style={{
-                    flexShrink: 0,
-                    background: 'rgba(255, 255, 255, 0.15)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    padding: '4px 6px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'background 0.2s',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)')}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              )}
-
-              {/* Auto-dismiss progress bar */}
-              {!isLoading && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    height: '3px',
-                    background: 'rgba(255, 255, 255, 0.4)',
-                    borderRadius: '0 0 14px 14px',
-                    width: t.visible ? '0%' : '100%',
-                    transition: t.visible ? `width ${(t.duration || 4000) / 1000}s linear` : 'none',
-                  }}
-                />
-              )}
-            </div>
-          );
-        }}
-      </Toaster>
+      {/* Stacked, grouped notifications - see components/ui/Toast.tsx */}
+      <ToastStack />
+      {/* One dialog style for every confirm / alert / prompt — see swal in components/ui/SweetAlert. */}
+      <SweetAlertHost />
       </LanguageProvider>
     </AuthProvider>
     </>

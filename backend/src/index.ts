@@ -19,12 +19,13 @@ import path from 'path';
 
 import routes from './routes/index.js';
 import landingRoutes from './routes/landing.routes.js';
+import storePagesRoutes from './routes/storePages.routes.js';
 import { loadSecrets } from './lib/secretStore.js';
 import { reconcileInterruptedDeploys } from './services/deploy.service.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { setupPassport } from './config/passport.js';
-import { securityHeaders, ipFilter, sanitizeInput, validateRequestSize, globalRateLimiter, rateLimitCheckMiddleware } from './middleware/security.js';
+import { securityHeaders, ipFilter, sanitizeInput, validateRequestSize, globalRateLimiter, authenticatedRateLimiter, rateLimitCheckMiddleware } from './middleware/security.js';
 import { maintenanceMiddleware } from './middleware/maintenance.js';
 import { startLeadsReassignmentCron } from './jobs/leadReassignment.js';
 import { seedTrafficData } from './lib/trafficTracker.js';
@@ -142,11 +143,15 @@ const checkOrigin = (origin: string | undefined, callback: (err: Error | null, o
     return;
   }
 
-  // Support local development subdomains on localhost (e.g., http://seller.localhost:5173)
+  // Support local development subdomains on localhost (e.g., http://seller.localhost:5173).
+  // 127.0.0.1 is the same dev server reached by address rather than by name:
+  // it has no subdomains, so a store is named there by `?__store=` instead,
+  // and refusing the origin made that fallback fail with an opaque CORS error.
   try {
     const parsedOrigin = new URL(origin);
     const hostname = parsedOrigin.hostname;
-    if ((hostname === 'localhost' || hostname.endsWith('.localhost')) && parsedOrigin.port === '5173') {
+    const isDevHost = hostname === 'localhost' || hostname.endsWith('.localhost') || hostname === '127.0.0.1' || hostname === '[::1]';
+    if (isDevHost && parsedOrigin.port === '5173') {
       callback(null, origin);
       return;
     }
@@ -198,6 +203,7 @@ const io = new SocketServer(server, {
 
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  hsts: process.env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
 }));
 
 app.use(cors({
@@ -276,6 +282,10 @@ app.use(ipFilter);
 //   BEFORE the API mount          - globalRateLimiter is scoped to /api/v1 and stays
 //                                   there; bursty ad traffic is the point of this route
 app.use('/r', landingRoutes);
+// Compiled storefront pages on seller hosts: `/` and `/pages/:slug`. Acts
+// only when the host resolves to a published store with a Studio-built page;
+// otherwise calls next() and the platform is served as before.
+app.use(storePagesRoutes);
 
 app.use(sanitizeInput);
 app.use(validateRequestSize(5 * 1024 * 1024));
@@ -303,7 +313,7 @@ app.use('/uploads', (req, res, next) => {
 
 app.use(maintenanceMiddleware);
 
-app.use(`${API_PREFIX}`, rateLimitCheckMiddleware, globalRateLimiter, routes);
+app.use(`${API_PREFIX}`, rateLimitCheckMiddleware, globalRateLimiter, authenticatedRateLimiter, routes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -556,12 +566,12 @@ const setupChatSocket = () => {
       });
     });
 
-    // Allow-list. This handler used to join ANY caller to ANY room by name, and
-    // io.use() above admits sockets with no token at all — so any visitor could
-    // `join-room('role:SUPER_ADMIN')` and receive admin-only broadcasts. These two are
-    // the only rooms the frontend ever joins (lib/socket.ts, DashboardLayout, Support,
-    // Chat, SupportTickets); role:*, user:*, perf:* and stream-room:* are off limits.
-    const JOINABLE_ROOMS = new Set(['support-queue', 'callcenter']);
+    // Allow-list for public joinable rooms
+    const JOINABLE_ROOMS = new Set(['support-queue', 'callcenter', 'broadcast', 'mobile']);
+
+    // Every connected client (web and mobile) automatically joins broadcast rooms
+    socket.join('broadcast');
+    socket.join('mobile');
 
     socket.on('join-room', (room: string) => {
       if (!JOINABLE_ROOMS.has(room)) return;
@@ -571,6 +581,21 @@ const setupChatSocket = () => {
     socket.on('leave-room', (room: string) => {
       if (!JOINABLE_ROOMS.has(room)) return;
       socket.leave(room);
+    });
+
+    // Client broadcast test: fires to all phones and connected browsers
+    socket.on('broadcast:test', (data: any) => {
+      console.log('[Socket] broadcast:test received:', data);
+      const payload = {
+        id: Date.now(),
+        type: data?.type || 'SALE',
+        title: data?.title || '💰 Diffusion en direct reçue !',
+        body: data?.body || 'Événement WebSocket diffusé avec succès sur tous les téléphones et appareils connectés.',
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      };
+      io.emit('broadcast:notification', payload);
+      io.emit('new-notification', payload);
     });
 
     const rawIp = socket.handshake.headers['cf-connecting-ip'] ||

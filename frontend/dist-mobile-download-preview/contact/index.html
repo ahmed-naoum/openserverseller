@@ -1,0 +1,232 @@
+<!DOCTYPE html><html lang="fr" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/new logo/logo filess-25.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Contactez SILACOD par email, téléphone ou WhatsApp au +212 660-517679. Siège à Agadir, centre d'appel à Casablanca. Support disponible pour les vendeurs.">
+    <meta name="keywords" content="dropshipping, maroc, cosmétiques, compléments alimentaires, white-label, private-label">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <!-- Turnstile (/register) and the Facebook pixel (/r/:code checkout) are
+         never used by the landing page. As `preconnect` they each opened a TCP+TLS
+         connection during the critical path for nothing — Lighthouse flagged all three
+         as unused and warned about exceeding four preconnects. dns-prefetch keeps the
+         part that actually matters on a cold visit (DNS) at a fraction of the cost. -->
+    <link rel="dns-prefetch" href="https://challenges.cloudflare.com">
+    <link rel="dns-prefetch" href="https://connect.facebook.net">
+    <!-- Loaded without blocking the parser. As a plain stylesheet this sat on the
+         critical path for ~750ms on a slow connection before anything could paint.
+         The `print` media type makes the browser fetch it at low priority without
+         waiting on it; `onload` promotes it to `all` once it arrives. Both families
+         already declare `display=swap`, so text renders in the fallback face and
+         swaps — a brief FOUT is the trade, and it is the right one on a page a
+         customer reaches from an ad. The <noscript> copy keeps crawlers and
+         script-less clients rendering the intended faces. -->
+    <link rel="stylesheet" media="print" onload="this.media='all'; this.onload=null;" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Cairo:wght@400;500;600;700;800&amp;display=swap">
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    </noscript>
+    <title>Contact SILACOD — Support 7j/7 | Agadir &amp; Casablanca</title>
+    <!--
+      Starts the offer request from the parsed HTML, before a single byte of the
+      bundle has run.
+
+      A customer opening /r/<code> used to wait through four serial steps before
+      the product could paint: the JS had to download and execute, React had to
+      mount, the route's own chunk had to be fetched, and only then did the data
+      request begin. Issued here it runs concurrently with the CSS and JS
+      downloads instead of queueing behind them, and ReferralForm consumes the
+      in-flight promise on mount.
+
+      Deliberately dependency-free and failure-tolerant: any error resolves to
+      null and the component falls back to its normal request, so the page
+      cannot be worse off than before. The x-client-* headers mirror the axios
+      interceptor so traffic analytics record the same fields; the request is
+      same-origin, so they cost no preflight.
+    -->
+    <script>
+      (function () {
+        var m = /^\/r\/([^/?#]+)/.exec(location.pathname);
+        if (!m || !window.fetch) return;
+
+        var raw = m[1], code;
+        try { code = decodeURIComponent(raw); } catch (e) { code = raw; }
+
+        var ua = navigator.userAgent;
+        var v = ua.match(/(chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
+
+        var body = fetch('/api/v1/influencer/links/' + raw + '/public', {
+          credentials: 'include',
+          headers: {
+            'x-client-screen': screen.width + 'x' + screen.height,
+            'x-client-window': window.innerWidth + 'x' + window.innerHeight,
+            'x-client-cookies': navigator.cookieEnabled ? '1' : '0',
+            'x-client-js': '1',
+            'x-client-platform': navigator.platform,
+            'x-client-browser-version': v.length > 2 ? v[2] : '',
+            'x-client-device-type':
+              /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+                ? 'Mobile'
+                : 'Desktop'
+          }
+        })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .catch(function () { return null; });
+
+        window.__REFERRAL_PRELOAD__ = { code: code, body: body };
+
+        /*
+          Start the hero image as soon as the payload names it.
+          ----------------------------------------------------
+          The request above already runs during HTML parse, but the browser did
+          not learn the image URL until React had downloaded, mounted, fetched
+          the route chunk and rendered — so the largest element on the page
+          began downloading several steps after its URL was known. Issuing a
+          <link rel=preload> here collapses that gap to nothing.
+
+          Only the first image block is preloaded, and only if it appears in the
+          first three: BlockRenderer marks every image eager/high-priority, so
+          preloading a below-the-fold one would compete with the real LCP
+          element for bandwidth rather than help it.
+
+          The href must resolve to exactly what BlockRenderer renders, or the
+          image downloads twice. It does, because both are relative to the page
+          origin — resolveUrl() prefixes BACKEND_URL, which with VITE_API_URL
+          unset is window.location.origin. Re-pointing BACKEND_URL at another
+          host without updating this would silently double-fetch the image.
+
+          Failure-tolerant like the fetch above: any unexpected shape simply
+          skips the preload, and the page behaves exactly as it did before.
+        */
+        body.then(function (payload) {
+          if (!payload) return;
+
+          var d = payload.status === 'success' ? payload.data : payload;
+          var cs = d && d.landingPage && d.landingPage.customStructure;
+          if (typeof cs === 'string') {
+            try { cs = JSON.parse(cs); } catch (e) { return; }
+          }
+
+          var blocks = cs && cs.blocks;
+          if (!blocks || !blocks.length) return;
+
+          for (var i = 0; i < blocks.length && i < 3; i++) {
+            var b = blocks[i];
+            if (!b || b.type !== 'image' || !b.content || !b.content.url) continue;
+            if (b.content.url.indexOf('data:') === 0) return;
+
+            var link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.href = b.content.url;
+            link.fetchPriority = 'high';
+            document.head.appendChild(link);
+            return;
+          }
+        }).catch(function () { /* never let a preload break the page */ });
+      })();
+    </script>
+    <script type="module" crossorigin="" src="/assets/index-CrhPwO8L.js"></script>
+    <link rel="modulepreload" crossorigin="" href="/assets/vendor-react-TCh3YQXp.js">
+    <link rel="modulepreload" crossorigin="" href="/assets/vendor-motion-DU7TDnNB.js">
+    <link rel="modulepreload" crossorigin="" href="/assets/vendor-charts-B0k39AjU.js">
+    <link rel="modulepreload" crossorigin="" href="/assets/vendor-rrweb-Dp0szzzs.js">
+    <link rel="stylesheet" crossorigin="" href="/assets/vendor-rrweb-DcYM-0Vg.css">
+    <link rel="stylesheet" crossorigin="" href="/assets/index-jbsoASYe.css">
+  <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js" defer=""></script><style id="_goober"> @keyframes go2264125279{from{transform:scale(0) rotate(45deg);opacity:0;}to{transform:scale(1) rotate(45deg);opacity:1;}}@keyframes go3020080000{from{transform:scale(0);opacity:0;}to{transform:scale(1);opacity:1;}}@keyframes go463499852{from{transform:scale(0) rotate(90deg);opacity:0;}to{transform:scale(1) rotate(90deg);opacity:1;}}@keyframes go1268368563{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}@keyframes go1310225428{from{transform:scale(0) rotate(45deg);opacity:0;}to{transform:scale(1) rotate(45deg);opacity:1;}}@keyframes go651618207{0%{height:0;width:0;opacity:0;}40%{height:0;width:6px;opacity:1;}100%{opacity:1;height:10px;}}@keyframes go901347462{from{transform:scale(0.6);opacity:0.4;}to{transform:scale(1);opacity:1;}}.go4109123758{z-index:9999;}.go4109123758 > *{pointer-events:auto;}</style><meta name="robots" data-seo-managed="true" content="index, follow"><link rel="canonical" data-seo-managed="true" href="https://silacod.com/contact"><meta property="og:title" data-seo-managed="true" content="Contact SILACOD — Support 7j/7 | Agadir &amp; Casablanca"><meta property="og:description" data-seo-managed="true" content="Contactez SILACOD par email, téléphone ou WhatsApp au +212 660-517679. Siège à Agadir, centre d'appel à Casablanca. Support disponible pour les vendeurs."><meta property="og:type" data-seo-managed="true" content="website"><meta property="og:url" data-seo-managed="true" content="https://silacod.com/contact"><meta property="og:site_name" data-seo-managed="true" content="SILACOD"><meta property="og:locale" data-seo-managed="true" content="fr_MA"><meta property="og:image" data-seo-managed="true" content="https://silacod.com/logo-full-new.svg"><meta name="twitter:card" data-seo-managed="true" content="summary_large_image"><meta name="twitter:title" data-seo-managed="true" content="Contact SILACOD — Support 7j/7 | Agadir &amp; Casablanca"><meta name="twitter:description" data-seo-managed="true" content="Contactez SILACOD par email, téléphone ou WhatsApp au +212 660-517679. Siège à Agadir, centre d'appel à Casablanca. Support disponible pour les vendeurs."><meta name="twitter:image" data-seo-managed="true" content="https://silacod.com/logo-full-new.svg"><script type="application/ld+json" id="ld-site" data-seo-managed="true">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://silacod.com/#organization","name":"SILACOD","alternateName":["سيلاكود","SilaCOD","SILACOD SARL"],"legalName":"SILACOD SARL","url":"https://silacod.com","logo":{"@type":"ImageObject","url":"https://silacod.com/logo-full-new.svg"},"email":"contact@silacod.com","telephone":"+212660517679","foundingDate":"2026-04-17","taxID":"003942785000074","address":{"@type":"PostalAddress","addressLocality":"Agadir","addressRegion":"Souss-Massa","addressCountry":"MA"},"areaServed":{"@type":"Country","name":"Morocco"},"knowsAbout":["dropshipping","white-label manufacturing","private label cosmetics","dietary supplements","cash on delivery","e-commerce fulfillment","order confirmation call centre"],"sameAs":["https://www.instagram.com/silacod.ma/"]},{"@type":"WebSite","@id":"https://silacod.com/#website","url":"https://silacod.com","name":"SILACOD","publisher":{"@id":"https://silacod.com/#organization"},"inLanguage":"fr-MA"}]}</script><script type="application/ld+json" id="ld-page" data-seo-managed="true">{"@context":"https://schema.org","@type":"WebPage","@id":"https://silacod.com/contact#webpage","url":"https://silacod.com/contact","name":"Contact SILACOD — Support 7j/7 | Agadir & Casablanca","description":"Contactez SILACOD par email, téléphone ou WhatsApp au +212 660-517679. Siège à Agadir, centre d'appel à Casablanca. Support disponible pour les vendeurs.","inLanguage":"fr-MA","isPartOf":{"@id":"https://silacod.com/#website"},"about":{"@id":"https://silacod.com/#organization"}}</script></head>
+  <body>
+    <div id="root"><div style="position: fixed; inset: 0px; z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgb(255, 255, 255); opacity: 1; transform: scale(1); transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: all; overflow: hidden;"><div class="scene"><div class="logo-wrap" id="logoWrap"><svg class="logo-svg" viewBox="0 0 516.18 719.35" xmlns="http://www.w3.org/2000/svg" id="logoSvg"><defs><filter id="softGlow"><feGaussianBlur stdDeviation="8" result="blur"></feGaussianBlur><feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter></defs><path class="logo-glow" d="M512.76,156c-7.9-40.28-26.44-74.84-56.27-103.04C422.32,20.64,381.45,3.27,334.55.33c-18.94-1.19-37.64.87-56.09,5.41-56.9,13.99-106.36,55.18-130.19,108.68-13.4,30.08-17.96,61.48-13.45,94.12,2.3,16.62,4.83,33.2,7.22,49.81,2.09,14.55,4.08,29.11,6.17,43.66,2.38,16.61,4.89,33.19,7.19,49.81.5,3.62,1.51,7.21,1.25,10.92,1.21,3.35,1.27,6.91,1.78,10.37,2.74,18.65,5.34,37.31,7.98,55.97.04.32.11.63.19.94.2.82.88,1,1.46.69,1.26-.68,2.44-1.5,3.64-2.3,25.27-16.81,50.53-33.63,75.81-50.44,1.29-.85,2.46-1.95,3.88-2.3.82.49.94,1.13,1.06,1.75,4.22,21.63,8.43,43.26,12.65,64.88,4.28,21.94,8.57,43.88,12.86,65.82.83,4.23,1.71,8.45,2.49,12.69,2.22,12.03,1.32,23.86-2.52,35.46-5.6,16.89-15.81,30.55-29.64,41.53-18.98,15.07-40.66,22.02-64.79,19.88-25.42-2.25-46.29-13.7-62.43-33.49-11.52-14.12-18.25-30.35-19.83-48.51-1.77-20.42,3.07-39.32,14.11-56.6,4.5-7.04,9.88-13.35,16.06-18.97.83-.75,1.64-1.53,2.51-2.23.98-.79,1.25-1.73,1.06-2.96-.51-3.32-.91-6.65-1.4-9.97-2.09-14.06-4.23-28.11-6.28-42.18-1.06-7.26-2-14.54-2.99-21.81-.72-4.41-1.49-8.81-2.16-13.22-1.09-7.26-2.1-14.54-3.2-21.8-.17-1.15-.21-2.44-1.16-3.54-.76.5-1.31.81-1.8,1.18-5.3,4.11-10.61,8.21-15.89,12.35-10.31,8.08-20.89,15.83-30.84,24.33-32.82,28.05-54.4,63.08-64.37,105.19-1.58,6.69-2.38,13.51-3.79,20.22.13,1.64.18,3.27-.6,4.8.28,1.3.1,2.58-.28,3.83-.02,2.23.01,4.47-.07,6.7-.78,19.96,1.45,39.56,6.93,58.78,21.63,75.92,86.96,130.93,166.2,138.68,20.84,2.04,41.47.42,61.86-4.47,56.03-13.44,103.93-52,128.91-103.91,9.22-19.17,15.11-39.29,17.4-60.46,1.31-12.13,1.58-24.28.26-36.37-1.52-13.81-3.72-27.54-5.68-41.3-2.08-14.55-4.24-29.08-6.36-43.62-1.78-12.17-3.57-24.34-5.32-36.51-.75-5.21-1.4-10.43-2.09-15.65-1.03-6.63-2.12-13.24-3.09-19.88-1.76-12.01-3.44-24.04-5.19-36.05-1.43-9.8-2.9-19.6-4.35-29.4-.05-.32-.06-.64-.12-.95-.26-1.46-.97-1.75-2.31-.84-1.45.99-2.86,2.04-4.29,3.06-26.65,19.05-53.3,38.1-79.96,57.15-1.29.92-2.59,1.82-3.84,2.69-1.4-.73-1.26-1.97-1.41-2.98-2.03-13.43-4-26.86-6.01-40.29-1.79-12.01-3.61-24.01-5.4-36.02-1.74-11.69-3.46-23.39-5.2-35.08-1.71-11.54-3.18-23.12-5.21-34.6-4.36-24.69,1.81-46.64,17.07-66.1,13.46-17.16,30.83-28.5,52.26-33.38,37.59-8.55,75.23,7.8,95.35,39.02,11.79,18.29,16.59,38.32,14,59.9-2.41,20-10.98,37.23-24.93,51.75-2.21,2.3-4.56,4.48-6.98,6.57-1.24,1.08-1.62,2.22-1.38,3.78.77,5.05,1.48,10.12,2.22,15.18,1.82,12.49,3.63,24.98,5.45,37.47,1.75,12.01,3.51,24.03,5.27,36.04.28,1.89.7,3.77.47,5.71,1.42,5.83,2.06,11.79,2.7,17.74q.89,1.03,2.01-.14c.03-.27.18-.38.45-.31.67-.08,1.15-.42,1.41-1.05.2-.57.62-.86,1.2-.95.26-.22.52-.44.78-.65,0,0,.1-.26.1-.26h.28c.2-.05.35-.16.45-.35.89-1.1,1.94-1.98,3.26-2.54.25-.2.49-.41.74-.62,0,0,.12-.27.12-.27l.3-.02c.66-.08,1.15-.41,1.41-1.04.21-.57.63-.86,1.21-.96.26-.21.51-.43.77-.65,0,0,.11-.26.11-.26h.29c.19-.05.33-.15.42-.32.89-1.11,1.96-2,3.28-2.56.24-.2.48-.4.72-.61.03-.27.17-.37.44-.31.66-.08,1.14-.41,1.4-1.04.21-.57.63-.86,1.21-.96.26-.22.52-.43.77-.65,0,0,.11-.27.11-.27h.29c.18-.05.31-.14.4-.3,2.13-2.11,4.46-3.99,7.06-5.5.25-.21.51-.42.76-.64-.12,0-.22,0-.31.02.09-.02.19-.03.31-.02,0,0,.13-.27.13-.27l.3-.02s.37-.26.37-.26c2.13-2.13,4.47-4,7.08-5.52.26-.21.51-.43.77-.64,0,0,.1-.26.1-.26h.28c.69-.09,1.19-.42,1.45-1.08,2.09-2.2,4.48-4.03,7-5.7.26-.23.51-.45.77-.68,0,0,.05-.24.05-.24h.25c.27-.09.46-.26.58-.52h0c4.41-4.28,8.86-8.52,13.23-12.84,2.57-2.55,5.01-5.23,7.51-7.86.24-.11.4-.3.48-.54,0,0,0-.25,0-.25l.24-.05c.23-.27.47-.53.7-.8,1.94-2.87,4.06-5.6,6.5-8.06,0,0,.23-.36.23-.36,0,0,0-.28,0-.28l.26-.1c.23-.28.45-.56.68-.84.27-.94.84-1.66,1.64-2.22.17-.12.27-.28.32-.48,0,0-.04-.24-.04-.24l.23-.07h0c.24-.3.47-.61.71-.91,0,0,.06-.09.06-.09.6-.32.92-.82,1.01-1.49,0,0-.02-.27-.02-.27l.24-.11c.22-.29.44-.58.66-.88,0,0,.07-.12.07-.12.26-.37.52-.73.78-1.1.16-.29.32-.58.48-.87-.01-.11-.01-.21,0-.3-.02.09-.02.19,0,.3.2-.26.4-.53.6-.79,0,0,.07-.12.07-.12.58-.34.89-.86.97-1.52,0,0-.03-.26-.03-.26l.23-.11c.22-.31.44-.61.66-.92h0c.06-.88.6-1.46,1.19-2.02.23-.33.45-.66.68-.98.16-.32.32-.64.48-.96h0c.18-.26.37-.52.55-.79-.1.03-.19.06-.27.11.08-.04.17-.08.27-.11.03-.88.57-1.48,1.14-2.06.23-.35.46-.7.68-1.05.13-.29.26-.59.39-.88.2-.31.41-.62.61-.93.15-.33.3-.67.44-1,.18-.28.37-.56.55-.83,1.42-3.72,3.37-7.18,5.23-10.68.17-.29.34-.58.51-.87-.1.04-.19.08-.27.14-.15.11-.25.25-.27.43.02-.18.12-.32.27-.43.08-.05.17-.1.27-.14.12-.34.24-.69.36-1.03.19-.33.38-.66.56-.99.1-.3.2-.61.3-.91.54-.42.77-.99.77-1.66.17-.43.34-.86.51-1.29.25-.21.38-.48.4-.8.11-.35.21-.71.32-1.06.18-.36.37-.72.55-1.07-.02-.71.13-1.35.66-1.87.25-.22.37-.5.38-.83.09-.34.18-.68.28-1.02h0c.19-.4.38-.8.56-1.2h0c.16-.56.32-1.13.48-1.69.17-.37.34-.73.52-1.1.16-.59.32-1.19.48-1.78-.04-.12-.05-.24-.04-.34,0,.1,0,.22.04.34.16-.35.33-.7.49-1.05-.11.06-.2.12-.28.19.08-.07.17-.13.28-.19.15-.61.3-1.21.45-1.82.16-.37.33-.74.49-1.11,1.72-69.7,3.44-13.93,5.16-20.9.81-5.85,1.8-11.68,2.38-17.55,1.79-18.09,1.01-36.08-2.5-53.93Z"></path><path class="logo-path" id="drawPath" d="M512.76,156c-7.9-40.28-26.44-74.84-56.27-103.04C422.32,20.64,381.45,3.27,334.55.33c-18.94-1.19-37.64.87-56.09,5.41-56.9,13.99-106.36,55.18-130.19,108.68-13.4,30.08-17.96,61.48-13.45,94.12,2.3,16.62,4.83,33.2,7.22,49.81,2.09,14.55,4.08,29.11,6.17,43.66,2.38,16.61,4.89,33.19,7.19,49.81.5,3.62,1.51,7.21,1.25,10.92,1.21,3.35,1.27,6.91,1.78,10.37,2.74,18.65,5.34,37.31,7.98,55.97.04.32.11.63.19.94.2.82.88,1,1.46.69,1.26-.68,2.44-1.5,3.64-2.3,25.27-16.81,50.53-33.63,75.81-50.44,1.29-.85,2.46-1.95,3.88-2.3.82.49.94,1.13,1.06,1.75,4.22,21.63,8.43,43.26,12.65,64.88,4.28,21.94,8.57,43.88,12.86,65.82.83,4.23,1.71,8.45,2.49,12.69,2.22,12.03,1.32,23.86-2.52,35.46-5.6,16.89-15.81,30.55-29.64,41.53-18.98,15.07-40.66,22.02-64.79,19.88-25.42-2.25-46.29-13.7-62.43-33.49-11.52-14.12-18.25-30.35-19.83-48.51-1.77-20.42,3.07-39.32,14.11-56.6,4.5-7.04,9.88-13.35,16.06-18.97.83-.75,1.64-1.53,2.51-2.23.98-.79,1.25-1.73,1.06-2.96-.51-3.32-.91-6.65-1.4-9.97-2.09-14.06-4.23-28.11-6.28-42.18-1.06-7.26-2-14.54-2.99-21.81-.72-4.41-1.49-8.81-2.16-13.22-1.09-7.26-2.1-14.54-3.2-21.8-.17-1.15-.21-2.44-1.16-3.54-.76.5-1.31.81-1.8,1.18-5.3,4.11-10.61,8.21-15.89,12.35-10.31,8.08-20.89,15.83-30.84,24.33-32.82,28.05-54.4,63.08-64.37,105.19-1.58,6.69-2.38,13.51-3.79,20.22.13,1.64.18,3.27-.6,4.8.28,1.3.1,2.58-.28,3.83-.02,2.23.01,4.47-.07,6.7-.78,19.96,1.45,39.56,6.93,58.78,21.63,75.92,86.96,130.93,166.2,138.68,20.84,2.04,41.47.42,61.86-4.47,56.03-13.44,103.93-52,128.91-103.91,9.22-19.17,15.11-39.29,17.4-60.46,1.31-12.13,1.58-24.28.26-36.37-1.52-13.81-3.72-27.54-5.68-41.3-2.08-14.55-4.24-29.08-6.36-43.62-1.78-12.17-3.57-24.34-5.32-36.51-.75-5.21-1.4-10.43-2.09-15.65-1.03-6.63-2.12-13.24-3.09-19.88-1.76-12.01-3.44-24.04-5.19-36.05-1.43-9.8-2.9-19.6-4.35-29.4-.05-.32-.06-.64-.12-.95-.26-1.46-.97-1.75-2.31-.84-1.45.99-2.86,2.04-4.29,3.06-26.65,19.05-53.3,38.1-79.96,57.15-1.29.92-2.59,1.82-3.84,2.69-1.4-.73-1.26-1.97-1.41-2.98-2.03-13.43-4-26.86-6.01-40.29-1.79-12.01-3.61-24.01-5.4-36.02-1.74-11.69-3.46-23.39-5.2-35.08-1.71-11.54-3.18-23.12-5.21-34.6-4.36-24.69,1.81-46.64,17.07-66.1,13.46-17.16,30.83-28.5,52.26-33.38,37.59-8.55,75.23,7.8,95.35,39.02,11.79,18.29,16.59,38.32,14,59.9-2.41,20-10.98,37.23-24.93,51.75-2.21,2.3-4.56,4.48-6.98,6.57-1.24,1.08-1.62,2.22-1.38,3.78.77,5.05,1.48,10.12,2.22,15.18,1.82,12.49,3.63,24.98,5.45,37.47,1.75,12.01,3.51,24.03,5.27,36.04.28,1.89.7,3.77.47,5.71,1.42,5.83,2.06,11.79,2.7,17.74q.89,1.03,2.01-.14c.03-.27.18-.38.45-.31.67-.08,1.15-.42,1.41-1.05.2-.57.62-.86,1.2-.95.26-.22.52-.44.78-.65,0,0,.1-.26.1-.26h.28c.2-.05.35-.16.45-.35.89-1.1,1.94-1.98,3.26-2.54.25-.2.49-.41.74-.62,0,0,.12-.27.12-.27l.3-.02c.66-.08,1.15-.41,1.41-1.04.21-.57.63-.86,1.21-.96.26-.21.51-.43.77-.65,0,0,.11-.26.11-.26h.29c.19-.05.33-.15.42-.32.89-1.11,1.96-2,3.28-2.56.24-.2.48-.4.72-.61.03-.27.17-.37.44-.31.66-.08,1.14-.41,1.4-1.04.21-.57.63-.86,1.21-.96.26-.22.52-.43.77-.65,0,0,.11-.27.11-.27h.29c.18-.05.31-.14.4-.3,2.13-2.11,4.46-3.99,7.06-5.5.25-.21.51-.42.76-.64-.12,0-.22,0-.31.02.09-.02.19-.03.31-.02,0,0,.13-.27.13-.27l.3-.02s.37-.26.37-.26c2.13-2.13,4.47-4,7.08-5.52.26-.21.51-.43.77-.64,0,0,.1-.26.1-.26h.28c.69-.09,1.19-.42,1.45-1.08,2.09-2.2,4.48-4.03,7-5.7.26-.23.51-.45.77-.68,0,0,.05-.24.05-.24h.25c.27-.09.46-.26.58-.52h0c4.41-4.28,8.86-8.52,13.23-12.84,2.57-2.55,5.01-5.23,7.51-7.86.24-.11.4-.3.48-.54,0,0,0-.25,0-.25l.24-.05c.23-.27.47-.53.7-.8,1.94-2.87,4.06-5.6,6.5-8.06,0,0,.23-.36.23-.36,0,0,0-.28,0-.28l.26-.1c.23-.28.45-.56.68-.84.27-.94.84-1.66,1.64-2.22.17-.12.27-.28.32-.48,0,0-.04-.24-.04-.24l.23-.07h0c.24-.3.47-.61.71-.91,0,0,.06-.09.06-.09.6-.32.92-.82,1.01-1.49,0,0-.02-.27-.02-.27l.24-.11c.22-.29.44-.58.66-.88,0,0,.07-.12.07-.12.26-.37.52-.73.78-1.1.16-.29.32-.58.48-.87-.01-.11-.01-.21,0-.3-.02.09-.02.19,0,.3.2-.26.4-.53.6-.79,0,0,.07-.12.07-.12.58-.34.89-.86.97-1.52,0,0-.03-.26-.03-.26l.23-.11c.22-.31.44-.61.66-.92h0c.06-.88.6-1.46,1.19-2.02.23-.33.45-.66.68-.98.16-.32.32-.64.48-.96h0c.18-.26.37-.52.55-.79-.1.03-.19.06-.27.11.08-.04.17-.08.27-.11.03-.88.57-1.48,1.14-2.06.23-.35.46-.7.68-1.05.13-.29.26-.59.39-.88.2-.31.41-.62.61-.93.15-.33.3-.67.44-1,.18-.28.37-.56.55-.83,1.42-3.72,3.37-7.18,5.23-10.68.17-.29.34-.58.51-.87-.1.04-.19.08-.27.14-.15.11-.25.25-.27.43.02-.18.12-.32.27-.43.08-.05.17-.1.27-.14.12-.34.24-.69.36-1.03.19-.33.38-.66.56-.99.1-.3.2-.61.3-.91.54-.42.77-.99.77-1.66.17-.43.34-.86.51-1.29.25-.21.38-.48.4-.8.11-.35.21-.71.32-1.06.18-.36.37-.72.55-1.07-.02-.71.13-1.35.66-1.87.25-.22.37-.5.38-.83.09-.34.18-.68.28-1.02h0c.19-.4.38-.8.56-1.2h0c.16-.56.32-1.13.48-1.69.17-.37.34-.73.52-1.1.16-.59.32-1.19.48-1.78-.04-.12-.05-.24-.04-.34,0,.1,0,.22.04.34.16-.35.33-.7.49-1.05-.11.06-.2.12-.28.19.08-.07.17-.13.28-.19.15-.61.3-1.21.45-1.82.16-.37.33-.74.49-1.11,1.72-69.7,3.44-13.93,5.16-20.9.81-5.85,1.8-11.68,2.38-17.55,1.79-18.09,1.01-36.08-2.5-53.93Z"></path><path class="logo-fill" d="M512.76,156c-7.9-40.28-26.44-74.84-56.27-103.04C422.32,20.64,381.45,3.27,334.55.33c-18.94-1.19-37.64.87-56.09,5.41-56.9,13.99-106.36,55.18-130.19,108.68-13.4,30.08-17.96,61.48-13.45,94.12,2.3,16.62,4.83,33.2,7.22,49.81,2.09,14.55,4.08,29.11,6.17,43.66,2.38,16.61,4.89,33.19,7.19,49.81.5,3.62,1.51,7.21,1.25,10.92,1.21,3.35,1.27,6.91,1.78,10.37,2.74,18.65,5.34,37.31,7.98,55.97.04.32.11.63.19.94.2.82.88,1,1.46.69,1.26-.68,2.44-1.5,3.64-2.3,25.27-16.81,50.53-33.63,75.81-50.44,1.29-.85,2.46-1.95,3.88-2.3.82.49.94,1.13,1.06,1.75,4.22,21.63,8.43,43.26,12.65,64.88,4.28,21.94,8.57,43.88,12.86,65.82.83,4.23,1.71,8.45,2.49,12.69,2.22,12.03,1.32,23.86-2.52,35.46-5.6,16.89-15.81,30.55-29.64,41.53-18.98,15.07-40.66,22.02-64.79,19.88-25.42-2.25-46.29-13.7-62.43-33.49-11.52-14.12-18.25-30.35-19.83-48.51-1.77-20.42,3.07-39.32,14.11-56.6,4.5-7.04,9.88-13.35,16.06-18.97.83-.75,1.64-1.53,2.51-2.23.98-.79,1.25-1.73,1.06-2.96-.51-3.32-.91-6.65-1.4-9.97-2.09-14.06-4.23-28.11-6.28-42.18-1.06-7.26-2-14.54-2.99-21.81-.72-4.41-1.49-8.81-2.16-13.22-1.09-7.26-2.1-14.54-3.2-21.8-.17-1.15-.21-2.44-1.16-3.54-.76.5-1.31.81-1.8,1.18-5.3,4.11-10.61,8.21-15.89,12.35-10.31,8.08-20.89,15.83-30.84,24.33-32.82,28.05-54.4,63.08-64.37,105.19-1.58,6.69-2.38,13.51-3.79,20.22.13,1.64.18,3.27-.6,4.8.28,1.3.1,2.58-.28,3.83-.02,2.23.01,4.47-.07,6.7-.78,19.96,1.45,39.56,6.93,58.78,21.63,75.92,86.96,130.93,166.2,138.68,20.84,2.04,41.47.42,61.86-4.47,56.03-13.44,103.93-52,128.91-103.91,9.22-19.17,15.11-39.29,17.4-60.46,1.31-12.13,1.58-24.28.26-36.37-1.52-13.81-3.72-27.54-5.68-41.3-2.08-14.55-4.24-29.08-6.36-43.62-1.78-12.17-3.57-24.34-5.32-36.51-.75-5.21-1.4-10.43-2.09-15.65-1.03-6.63-2.12-13.24-3.09-19.88-1.76-12.01-3.44-24.04-5.19-36.05-1.43-9.8-2.9-19.6-4.35-29.4-.05-.32-.06-.64-.12-.95-.26-1.46-.97-1.75-2.31-.84-1.45.99-2.86,2.04-4.29,3.06-26.65,19.05-53.3,38.1-79.96,57.15-1.29.92-2.59,1.82-3.84,2.69-1.4-.73-1.26-1.97-1.41-2.98-2.03-13.43-4-26.86-6.01-40.29-1.79-12.01-3.61-24.01-5.4-36.02-1.74-11.69-3.46-23.39-5.2-35.08-1.71-11.54-3.18-23.12-5.21-34.6-4.36-24.69,1.81-46.64,17.07-66.1,13.46-17.16,30.83-28.5,52.26-33.38,37.59-8.55,75.23,7.8,95.35,39.02,11.79,18.29,16.59,38.32,14,59.9-2.41,20-10.98,37.23-24.93,51.75-2.21,2.3-4.56,4.48-6.98,6.57-1.24,1.08-1.62,2.22-1.38,3.78.77,5.05,1.48,10.12,2.22,15.18,1.82,12.49,3.63,24.98,5.45,37.47,1.75,12.01,3.51,24.03,5.27,36.04.28,1.89.7,3.77.47,5.71,1.42,5.83,2.06,11.79,2.7,17.74q.89,1.03,2.01-.14c.03-.27.18-.38.45-.31.67-.08,1.15-.42,1.41-1.05.2-.57.62-.86,1.2-.95.26-.22.52-.44.78-.65,0,0,.1-.26.1-.26h.28c.2-.05.35-.16.45-.35.89-1.1,1.94-1.98,3.26-2.54.25-.2.49-.41.74-.62,0,0,.12-.27.12-.27l.3-.02c.66-.08,1.15-.41,1.41-1.04.21-.57.63-.86,1.21-.96.26-.21.51-.43.77-.65,0,0,.11-.26.11-.26h.29c.19-.05.33-.15.42-.32.89-1.11,1.96-2,3.28-2.56.24-.2.48-.4.72-.61.03-.27.17-.37.44-.31.66-.08,1.14-.41,1.4-1.04.21-.57.63-.86,1.21-.96.26-.22.52-.43.77-.65,0,0,.11-.27.11-.27h.29c.18-.05.31-.14.4-.3,2.13-2.11,4.46-3.99,7.06-5.5.25-.21.51-.42.76-.64-.12,0-.22,0-.31.02.09-.02.19-.03.31-.02,0,0,.13-.27.13-.27l.3-.02s.37-.26.37-.26c2.13-2.13,4.47-4,7.08-5.52.26-.21.51-.43.77-.64,0,0,.1-.26.1-.26h.28c.69-.09,1.19-.42,1.45-1.08,2.09-2.2,4.48-4.03,7-5.7.26-.23.51-.45.77-.68,0,0,.05-.24.05-.24h.25c.27-.09.46-.26.58-.52h0c4.41-4.28,8.86-8.52,13.23-12.84,2.57-2.55,5.01-5.23,7.51-7.86.24-.11.4-.3.48-.54,0,0,0-.25,0-.25l.24-.05c.23-.27.47-.53.7-.8,1.94-2.87,4.06-5.6,6.5-8.06,0,0,.23-.36.23-.36,0,0,0-.28,0-.28l.26-.1c.23-.28.45-.56.68-.84.27-.94.84-1.66,1.64-2.22.17-.12.27-.28.32-.48,0,0-.04-.24-.04-.24l.23-.07h0c.24-.3.47-.61.71-.91,0,0,.06-.09.06-.09.6-.32.92-.82,1.01-1.49,0,0-.02-.27-.02-.27l.24-.11c.22-.29.44-.58.66-.88,0,0,.07-.12.07-.12.26-.37.52-.73.78-1.1.16-.29.32-.58.48-.87-.01-.11-.01-.21,0-.3-.02.09-.02.19,0,.3.2-.26.4-.53.6-.79,0,0,.07-.12.07-.12.58-.34.89-.86.97-1.52,0,0-.03-.26-.03-.26l.23-.11c.22-.31.44-.61.66-.92h0c.06-.88.6-1.46,1.19-2.02.23-.33.45-.66.68-.98.16-.32.32-.64.48-.96h0c.18-.26.37-.52.55-.79-.1.03-.19.06-.27.11.08-.04.17-.08.27-.11.03-.88.57-1.48,1.14-2.06.23-.35.46-.7.68-1.05.13-.29.26-.59.39-.88.2-.31.41-.62.61-.93.15-.33.3-.67.44-1,.18-.28.37-.56.55-.83,1.42-3.72,3.37-7.18,5.23-10.68.17-.29.34-.58.51-.87-.1.04-.19.08-.27.14-.15.11-.25.25-.27.43.02-.18.12-.32.27-.43.08-.05.17-.1.27-.14.12-.34.24-.69.36-1.03.19-.33.38-.66.56-.99.1-.3.2-.61.3-.91.54-.42.77-.99.77-1.66.17-.43.34-.86.51-1.29.25-.21.38-.48.4-.8.11-.35.21-.71.32-1.06.18-.36.37-.72.55-1.07-.02-.71.13-1.35.66-1.87.25-.22.37-.5.38-.83.09-.34.18-.68.28-1.02h0c.19-.4.38-.8.56-1.2h0c.16-.56.32-1.13.48-1.69.17-.37.34-.73.52-1.1.16-.59.32-1.19.48-1.78-.04-.12-.05-.24-.04-.34,0,.1,0,.22.04.34.16-.35.33-.7.49-1.05-.11.06-.2.12-.28.19.08-.07.17-.13.28-.19.15-.61.3-1.21.45-1.82.16-.37.33-.74.49-1.11,1.72-69.7,3.44-13.93,5.16-20.9.81-5.85,1.8-11.68,2.38-17.55,1.79-18.09,1.01-36.08-2.5-53.93Z"></path></svg></div></div><style>
+        .scene {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .logo-wrap {
+          position: relative;
+          width: 160px;
+          height: 220px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        svg.logo-svg {
+          width: 120px;
+          height: auto;
+          overflow: visible;
+        }
+
+        .logo-path {
+          fill: none;
+          stroke: #7c6fff;
+          stroke-width: 4;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          stroke-dasharray: 5000;
+          stroke-dashoffset: 5000;
+          filter: drop-shadow(0 0 6px rgba(124, 111, 255, 0.6));
+          animation: draw 1.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        .logo-fill {
+          fill: #282b6d;
+          opacity: 0;
+          animation: fill-in 0.4s ease forwards 1.6s;
+        }
+
+        .logo-glow {
+          fill: none;
+          stroke: rgba(124, 111, 255, 0.12);
+          stroke-width: 10;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          stroke-dasharray: 5000;
+          stroke-dashoffset: 5000;
+          animation: draw-glow 1.9s cubic-bezier(0.4, 0, 0.2, 1) forwards 0.05s;
+        }
+
+        @keyframes draw {
+          to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes draw-glow {
+          to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes fill-in {
+          0%   { opacity: 0; }
+          100% { opacity: 1; }
+        }
+
+        @keyframes stroke-fade {
+          0%   { stroke-opacity: 1; }
+          100% { stroke-opacity: 0; }
+        }
+
+        .logo-path.done {
+          animation: draw 1.8s cubic-bezier(0.4, 0, 0.2, 1) forwards,
+                     stroke-fade 0.4s ease forwards 1.6s;
+        }
+
+        /* Particle sparks */
+        .spark {
+          position: absolute;
+          width: 3px;
+          height: 3px;
+          border-radius: 50%;
+          background: rgba(160,140,255,0.8);
+          pointer-events: none;
+          animation: spark-fly 0.8s ease-out forwards;
+        }
+
+        @keyframes spark-fly {
+          0%   { opacity: 1; transform: translate(0,0) scale(1); }
+          100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0); }
+        }
+      </style></div><div class="min-h-screen bg-[#F8FAFC] font-['29LT_Kaff',_Cairo,_Inter,_sans-serif] text-slate-700 relative overflow-x-hidden selection:bg-[#ff5722]/10 selection:text-[#ff5722]"><div class="absolute top-[-10%] right-[-10%] w-[60%] h-[500px] bg-gradient-to-br from-[#ff5722]/8 to-transparent blur-[140px] rounded-full pointer-events-none animate-pulse duration-[8s]"></div><div class="absolute bottom-[-10%] left-[-10%] w-[60%] h-[500px] bg-gradient-to-tr from-[#2e315e]/6 to-transparent blur-[140px] rounded-full pointer-events-none animate-pulse duration-[10s]"></div><header class="sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-100 px-6 py-4"><div class="max-w-7xl mx-auto flex items-center justify-between"><a dir="ltr" class="flex items-center gap-2 group" href="/"><img src="/new logo/logo filess-25.svg" alt="SILACOD" class="w-9 h-9 object-contain group-hover:rotate-6 transition-transform duration-300"><img src="/new logo/logo filess-24.svg" alt="SILACOD" class="h-6 object-contain"></a><div class="flex items-center gap-4"><div class="relative inline-block text-left"><button class="flex items-center gap-2 px-4 h-[42px] rounded-[10px] bg-slate-50 hover:bg-slate-100 border border-slate-200/60 text-slate-700 font-semibold text-sm transition-all shadow-sm focus:outline-none" tabindex="0"><img src="https://flagcdn.com/w20/fr.png" srcset="https://flagcdn.com/w40/fr.png 2x" width="20" alt="" class="w-4 h-auto rounded-[2px]"><span class="hidden sm:inline">Français</span><div style="transform: none;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down w-3 h-3 text-slate-400"><path d="m6 9 6 6 6-6"></path></svg></div></button></div><a class="bg-gradient-to-r from-[#2e315e] to-indigo-950 hover:from-[#ff5722] hover:to-[#e64a19] text-white font-extrabold px-6 py-2.5 rounded-xl text-sm transition-all duration-300 shadow-md shadow-[#2e315e]/10 hover:shadow-lg hover:shadow-[#ff5722]/20 transform hover:-translate-y-0.5" href="/login">Connexion</a></div></div></header><main class="max-w-6xl mx-auto px-6 py-12 relative z-10"><div class="mb-10 flex justify-start"><a class="inline-flex items-center gap-2 text-sm font-extrabold text-slate-500 hover:text-[#ff5722] transition-colors group flex-row" href="/"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left transition-transform duration-300 group-hover:-translate-x-1"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg>Retour à l'accueil</a></div><div class="space-y-4 mb-16 text-center lg:text-left" dir="ltr"><div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-[#ff5722] to-[#e64a19] text-white mb-2 shadow-lg shadow-[#ff5722]/20 opacity-0"><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail animate-pulse"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg></div><h1 class="pt-1 text-4xl sm:text-5xl font-black text-[#2e315e] tracking-tight leading-none bg-gradient-to-r from-[#2e315e] via-[#2e315e] to-[#ff5722] bg-clip-text text-transparent inline-block">Contactez-nous</h1><p class="text-[#ff5722] font-black text-sm tracking-wider uppercase opacity-95">Contactez-nous — Nous sommes à votre écoute 24/7</p></div><div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start"><div class="lg:col-span-5 space-y-6" dir="ltr"><div class="bg-white/80 backdrop-blur-md rounded-[2.5rem] p-8 shadow-[0_10px_35px_rgba(0,0,0,0.015)] border border-slate-100/80 space-y-8 text-left"><h3 class="text-xl font-black text-[#2e315e]">Informations de contact</h3><p class="text-slate-500 text-xs sm:text-sm font-semibold leading-relaxed">Vous avez une question ou une demande ? N'hésitez pas à nous contacter via l'un des canaux disponibles, et notre équipe vous répondra dans les plus brefs délais.</p><div class="space-y-6"><div class="flex gap-4 items-center flex-row p-4 bg-slate-50/50 border border-slate-100 rounded-2xl hover:border-[#ff5722]/10 transition-colors group"><div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/10 group-hover:scale-105 transition-transform duration-300"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg></div><div><p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">E-mail</p><a href="mailto:support@silacod.com" class="text-sm font-black text-[#2e315e] hover:text-[#ff5722] transition-colors">support@silacod.com</a></div></div><div class="flex gap-4 items-center flex-row p-4 bg-slate-50/50 border border-slate-100 rounded-2xl hover:border-[#ff5722]/10 transition-colors group"><div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[#ff5722] to-rose-600 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#ff5722]/10 group-hover:scale-105 transition-transform duration-300"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-phone"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></div><div><p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">Téléphone / WhatsApp</p><a href="tel:+212660517679" class="text-sm font-black text-[#2e315e] hover:text-[#ff5722] transition-colors" dir="ltr">+212 660-517679</a></div></div><div class="flex gap-4 items-center flex-row p-4 bg-slate-50/50 border border-slate-100 rounded-2xl hover:border-[#ff5722]/10 transition-colors group"><div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/10 group-hover:scale-105 transition-transform duration-300"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg></div><div><p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">Localisation</p><p class="text-sm font-black text-[#2e315e]">Agadir, Maroc</p></div></div></div></div></div><div class="lg:col-span-7" dir="ltr"><div class="bg-white/80 backdrop-blur-md rounded-[2.5rem] p-8 sm:p-10 shadow-[0_10px_35px_rgba(0,0,0,0.015)] border border-slate-100/80"><form class="space-y-6"><div class="grid grid-cols-1 sm:grid-cols-2 gap-4"><div class="space-y-2"><label class="text-xs font-black text-slate-700 block ps-1">Nom Complet</label><input type="text" class="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 transition-all outline-none border text-[13px] text-slate-700 font-semibold placeholder:text-slate-400 text-left" placeholder="Votre nom complet" required="" value=""></div><div class="space-y-2"><label class="text-xs font-black text-slate-700 block ps-1">E-mail</label><input type="email" class="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 transition-all outline-none border text-[13px] text-slate-700 font-semibold placeholder:text-slate-400 text-left" placeholder="vous@exemple.com" required="" value=""></div></div><div class="space-y-2"><label class="text-xs font-black text-slate-700 block ps-1">Sujet</label><input type="text" class="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 transition-all outline-none border text-[13px] text-slate-700 font-semibold placeholder:text-slate-400 text-left" placeholder="Sujet de votre message" required="" value=""></div><div class="space-y-2"><label class="text-xs font-black text-slate-700 block ps-1">Message</label><textarea rows="5" class="w-full bg-[#f8f9fa] focus:bg-white border-transparent focus:border-[#ff5722] focus:ring-4 focus:ring-[#ff5722]/10 rounded-xl py-2.5 px-4 transition-all outline-none border text-[13px] text-slate-700 font-semibold placeholder:text-slate-400 resize-none text-left" placeholder="Votre message ici..." required=""></textarea></div><button type="submit" class="w-full bg-gradient-to-r from-[#ff5722] to-[#e64a19] text-white font-extrabold py-3.5 rounded-xl hover:opacity-95 transition-all text-sm shadow-[0_4px_14px_0_rgba(255,87,34,0.35)] disabled:opacity-50 flex items-center justify-center gap-2 transform hover:-translate-y-0.5"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path><path d="m21.854 2.147-10.94 10.939"></path></svg>Envoyer le message</button></form></div></div></div></main><footer class="bg-white border-t border-slate-100 py-10 text-center text-xs text-slate-400 font-semibold mt-16"><div class="max-w-7xl mx-auto px-6 space-y-3"><p class="text-slate-500 font-bold">© 2026 SILACOD. Tous droits réservés.</p><div class="flex justify-center gap-4 text-[13px]"><a class="hover:text-[#ff5722] transition-colors" href="/terms">Conditions d'utilisation</a><span class="text-slate-300">•</span><a class="hover:text-[#ff5722] transition-colors" href="/privacy">Politique de confidentialité</a></div><div class="flex justify-center items-center gap-2 pt-1"><a href="https://www.instagram.com/silacod.ma/" target="_blank" rel="noopener noreferrer me" aria-label="Instagram" title="Instagram" class="p-2 rounded-full text-slate-400 transition-colors focus:outline-none focus-visible:ring-2 hover:text-[#ff5722] hover:bg-[#ff5722]/5 focus-visible:ring-[#ff5722]/50"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-instagram w-[18px] h-[18px]" aria-hidden="true"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"></line></svg></a><a href="https://wa.me/212660517679" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" title="WhatsApp +212 660-517679" class="p-2 rounded-full text-slate-400 transition-colors focus:outline-none focus-visible:ring-2 hover:text-[#25D366] hover:bg-[#25D366]/5 focus-visible:ring-[#25D366]/50"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-message-circle w-[18px] h-[18px]" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></a><a href="mailto:contact@silacod.com" aria-label="Email" title="contact@silacod.com" class="p-2 rounded-full text-slate-400 transition-colors focus:outline-none focus-visible:ring-2 hover:text-[#ff5722] hover:bg-[#ff5722]/5 focus-visible:ring-[#ff5722]/50"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail w-[18px] h-[18px]" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg></a></div><p dir="ltr" class="text-[11px] text-slate-300 font-medium leading-relaxed">SILACOD SARL — Capital 100 000 MAD — RC Agadir 68439 — ICE 003942785000074</p></div></footer></div><div aria-live="polite" class="fixed z-[9999998] pointer-events-none" style="top: 16px; inset-inline-end: 16px; width: min(380px, -32px + 100vw);"><div class="relative pointer-events-auto" style="height: 0px; transition: height 0.28s cubic-bezier(0.22, 1, 0.36, 1);"><div class="absolute top-0 w-full flex items-center justify-between gap-2" aria-hidden="true" style="inset-inline-end: 0px; pointer-events: none; opacity: 0; transform: translateY(-4px);"><span class="ps-1 inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bell"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>0 notifications</span><button type="button" tabindex="-1" class="px-3 py-1.5 rounded-full bg-white/90 backdrop-blur border border-slate-200 shadow-sm text-[11px] font-black uppercase tracking-wider text-slate-600 hover:text-slate-900 hover:bg-white transition-colors">Tout effacer</button></div></div></div></div>
+
+  
+
+</body></html>

@@ -35,7 +35,7 @@ export default function LanguageSwitcherWidget({ variant = 'header' }: LanguageS
     : variant === 'footer'
     ? "h-12 px-4 rounded-xl bg-white text-slate-900 flex items-center justify-center hover:bg-slate-100 transition-all gap-2 font-black text-sm focus:outline-none shadow-sm cursor-pointer"
     : variant === 'dashboard-header'
-    ? "relative p-0 w-[33px] h-[33px] bg-white rounded-lg border border-slate-100 hover:border-primary-200 transition-all shadow-sm hover:shadow-md active:scale-95 flex items-center justify-center focus:outline-none"
+    ? "relative p-0 w-9 h-9 rounded-xl border border-transparent bg-slate-100/70 hover:bg-white hover:border-slate-200 hover:shadow-sm transition-all flex items-center justify-center focus:outline-none"
     : "flex items-center gap-2 px-4 h-[42px] rounded-[10px] bg-slate-50 hover:bg-slate-100 border border-slate-200/60 text-slate-700 font-semibold text-sm transition-all shadow-sm focus:outline-none";
 
   const dropdownClasses = variant === 'mobile-menu'
@@ -58,10 +58,7 @@ export default function LanguageSwitcherWidget({ variant = 'header' }: LanguageS
       >
         {variant === 'dashboard-header' ? (
           <div className="flex items-center justify-center relative w-full h-full">
-            <img src={`https://flagcdn.com/w20/${currentLang.flag}.png`} srcSet={`https://flagcdn.com/w40/${currentLang.flag}.png 2x`} width="20" alt="" className="w-5 h-auto rounded-[2px] shadow-sm" title={currentLang.label} />
-            <span className="hidden lg:inline-flex absolute -bottom-1 -right-1 items-center px-2 py-[2px] rounded bg-slate-100 text-[7.5px] font-black text-slate-400 border border-slate-200 shadow-sm leading-none transition-colors">
-              {currentLang.code.toUpperCase()}
-            </span>
+            <img src={`https://flagcdn.com/w20/${currentLang.flag}.png`} srcSet={`https://flagcdn.com/w40/${currentLang.flag}.png 2x`} width="20" alt="" className="w-5 h-auto rounded-[3px]" title={currentLang.label} />
           </div>
         ) : variant === 'header' ? (
           <>

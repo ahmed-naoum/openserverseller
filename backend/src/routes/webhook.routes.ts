@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { restockOrderItems } from '../lib/orderStock.js';
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -44,6 +45,25 @@ const COLIATY_TO_INTERNAL: Record<string, string> = {
 router.post(
   '/coliaty',
   asyncHandler(async (req, res) => {
+    // SEC-04: Authenticate Coliaty webhook via shared secret or key
+    const configuredSecret = (process.env.COLIATY_WEBHOOK_SECRET || process.env.COLIATY_SECRET_KEY || '').trim();
+    if (configuredSecret) {
+      const providedSecret = (
+        req.headers['x-coliaty-secret'] ||
+        req.headers['x-webhook-secret'] ||
+        req.headers['x-coliaty-signature'] ||
+        req.query.secret ||
+        req.query.token ||
+        (req.headers.authorization ? req.headers.authorization.replace('Bearer ', '') : '')
+      )?.toString().trim();
+
+      if (!providedSecret || providedSecret !== configuredSecret) {
+        console.warn(`[Coliaty Webhook] Rejected unauthorized attempt from IP ${req.ip}`);
+        res.status(401).json({ success: false, message: 'Unauthorized webhook request' });
+        return;
+      }
+    }
+
     const payload = req.body;
     const eventType = payload.EVENT || '';
     let packageCode = payload.TRACKING || payload.package_code || payload.tracking_code || payload.tracking || payload.code_tracking || payload.PACKAGE_CODE;
@@ -166,12 +186,7 @@ router.post(
                   include: { items: true }
                 });
                 if (orderWithItems) {
-                  for (const item of orderWithItems.items) {
-                    await tx.product.update({
-                      where: { id: item.productId },
-                      data: { stockQuantity: { increment: item.quantity } }
-                    });
-                  }
+                  await restockOrderItems(tx, orderWithItems.items);
                 }
               }
 
@@ -331,12 +346,7 @@ router.post(
                   });
                   
                   if (orderWithItems) {
-                    for (const item of orderWithItems.items) {
-                      await tx.product.update({
-                        where: { id: item.productId },
-                        data: { stockQuantity: { increment: item.quantity } }
-                      });
-                    }
+                    await restockOrderItems(tx, orderWithItems.items);
                   }
                 }
 
@@ -514,7 +524,7 @@ router.get(
     // helper is refused here explicitly rather than by omission.
     const streamUser = await prisma.user.findUnique({
       where: { uuid: decodedToken?.userId },
-      select: { role: { select: { name: true } } },
+      select: { id: true, role: { select: { name: true } } },
     });
     if (!streamUser || streamUser.role.name === 'VENDOR_HELPER') {
       res.status(403).end();
@@ -536,9 +546,12 @@ router.get(
     // Send initial connected event
     res.write(`event: connected\ndata: ${JSON.stringify({ userId: decodedToken?.id || 'unknown' })}\n\n`);
 
-    // Listen for status_update events and forward to this client
+    // SEC-05: Listen for status_update events and forward ONLY to authorized clients
     const onStatusUpdate = (data: any) => {
-      res.write(`event: status_update\ndata: ${JSON.stringify(data)}\n\n`);
+      const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(streamUser.role.name);
+      if (isAdmin || (data.vendorId && data.vendorId === streamUser.id)) {
+        res.write(`event: status_update\ndata: ${JSON.stringify(data)}\n\n`);
+      }
     };
 
     webhookEmitter.on('status_update', onStatusUpdate);

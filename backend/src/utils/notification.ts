@@ -28,12 +28,19 @@ export async function createNotification(userId: number, type: string, title: st
       select: { uuid: true },
     });
 
-    if (user?.uuid) {
-      // Dynamically import io to avoid circular dependencies during initialization
-      const { io } = await import('../index.js');
-      if (io) {
+    const { io } = await import('../index.js');
+    if (io) {
+      // 1. Broadcast to target user by UUID
+      if (user?.uuid) {
         io.to(`user:${user.uuid}`).emit('new-notification', notification);
+        io.to(`user:${user.uuid}`).emit('notification', notification);
       }
+      // 2. Broadcast to target user by numeric ID (e.g. mobile app or legacy sessions)
+      io.to(`user:${userId}`).emit('new-notification', notification);
+      io.to(`user:${userId}`).emit('notification', notification);
+
+      // 3. Broadcast to mobile devices room
+      io.to('mobile').emit('broadcast:notification', notification);
     }
 
     // Push to the user's phones. Fire-and-forget: a Firebase hiccup must not fail the caller.
@@ -50,3 +57,4 @@ export async function createNotification(userId: number, type: string, title: st
     return null;
   }
 }
+

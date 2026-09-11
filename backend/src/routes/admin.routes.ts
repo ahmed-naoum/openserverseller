@@ -5,12 +5,16 @@ import { isSessionRecordingEnabled, setSessionRecordingEnabled } from '../lib/se
 import { broadcastRecordingState, getIO } from '../lib/realtime.js';
 import { runSessionCleanup } from '../jobs/sessionCleanup.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
+import { resolveStoreName } from '../utils/storeName.js';
+import { syncStoreNameWithSubdomain } from '../services/store.service.js';
 import { checkAndActivateUser } from '../utils/verification.js';
 import { fetchMaintenanceSettings } from '../middleware/maintenance.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
-import { getBlockedIPsList, unblockIP } from '../middleware/security.js';
+import { getBlockedIPsList, unblockIP, clearAllRateLimitBlocks } from '../middleware/security.js';
 import { WRITABLE_PAYMENT_SITUATIONS } from '../lib/paymentSituation.js';
-import { resolvePage, resolvePageSize } from '../lib/pagination.js';
+import { resolvePage, resolvePageSize, fetchAllInBatches } from '../lib/pagination.js';
+import { parseDateRange } from '../lib/dateRange.js';
+import { AGENT_HISTORY_NOTES_FILTER, tallyAgentHistory } from '../lib/agentHistory.js';
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
@@ -1644,27 +1648,25 @@ router.patch(
       throw new AppException(400, 'Subdomain is required');
     }
 
-    const cleaned = subdomain.trim().toLowerCase();
-    const regex = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-    if (!regex.test(cleaned) || cleaned.length < 3 || cleaned.length > 30) {
-      throw new AppException(400, 'Invalid subdomain format (3-30 chars, lowercase letters, numbers, hyphens)');
-    }
-
-    // Check uniqueness
     const targetUser = await prisma.user.findUnique({ where: { uuid: String(uuid) } });
     if (!targetUser) throw new AppException(404, 'User not found');
 
-    const existing = await prisma.user.findFirst({
-      where: { subdomain: cleaned, NOT: { id: targetUser.id } }
-    });
-    if (existing) {
-      throw new AppException(400, 'This subdomain is already taken by another user');
+    // Same rules an admin's colleagues meet on the sign-up form and the Domains
+    // page — including the store-slug half of uniqueness, which a user-table
+    // check alone would miss.
+    const verdict = await resolveStoreName(subdomain, targetUser.id);
+    if (!verdict.ok) {
+      throw new AppException(400, verdict.message);
     }
+    const cleaned = verdict.value;
 
     const updated = await prisma.user.update({
       where: { uuid: String(uuid) },
       data: { subdomain: cleaned },
     });
+
+    // The storefront answers on this name, so it moves with it.
+    await syncStoreNameWithSubdomain(targetUser.id, cleaned);
 
     res.json({
       status: 'success',
@@ -2443,6 +2445,579 @@ router.get(
           activity: activityMap.get(agent.id) || null,
         };
       }),
+    });
+  })
+);
+
+// --- Call Center Analytics (admin ⇄ agent reconciliation) ---
+//
+// The inspector above and the agent's own pages count different things by
+// design: the inspector reads the CURRENT status of CURRENTLY-ASSIGNED leads
+// (windowed on the lead's arrival), while the agent pages rebuild everything
+// from the history rows the agent WROTE (windowed on the action, surviving
+// pool releases). This endpoint computes both views from the same database at
+// the same instant, on the same window, and decomposes every difference into
+// named, countable causes — so "the numbers don't match" becomes "17 leads
+// were released back to the pool and 4 were overwritten by the courier".
+
+// OOM backstops for the three batched reads, not page sizes — the response
+// reports `truncated` per read so a clipped window can't pass as a full one.
+const RECON_LEADS_CAP = 150000;
+const RECON_HISTORY_CAP = 300000;
+const RECON_PARCELS_CAP = 60000;
+// Per category, per agent. Enough rows to eyeball and spot-check by id in the
+// leads console without shipping whole tables in one JSON body.
+const RECON_SAMPLE_CAP = 12;
+
+/**
+ * The comparison space both views are projected onto: the six confirmation
+ * outcomes the agent can click, the claim state, and OTHER for everything
+ * neither side scores (NEW, CONTACTED, legacy values, unmapped carrier codes).
+ */
+const COMPARISON_KEYS = [
+  'ASSIGNED', 'CALL_LATER', 'NO_REPLY', 'CONFIRMED',
+  'WRONG_ORDER', 'CANCEL_REASON_PRICE', 'CANCEL_ORDER', 'OTHER',
+] as const;
+
+type ComparisonKey = (typeof COMPARISON_KEYS)[number];
+
+/** Current Lead.status → comparison bucket, using the same families as buildAgentMetrics. */
+const bucketOfCurrentStatus = (status: string | null | undefined): ComparisonKey => {
+  const s = (status || '').toUpperCase();
+  if (s === 'ASSIGNED') return 'ASSIGNED';
+  if (s === 'CALL_LATER' || s === 'CALLBACK_REQUESTED') return 'CALL_LATER';
+  if (s === 'NO_REPLY') return 'NO_REPLY';
+  if (s === 'WRONG_ORDER') return 'WRONG_ORDER';
+  if (s === 'CANCEL_REASON_PRICE' || s === 'PRICE_REJECTED') return 'CANCEL_REASON_PRICE';
+  if (s === 'CANCEL_ORDER') return 'CANCEL_ORDER';
+  if (CONFIRMED_STATUSES.includes(s)) return 'CONFIRMED';
+  return 'OTHER';
+};
+
+/** Agent's last action → comparison bucket. PUSHED folds into CONFIRMED exactly as the agent pages fold it. */
+const bucketOfLastAction = (action: string | null | undefined): ComparisonKey => {
+  const a = (action || '').toUpperCase();
+  if (a === 'CONFIRMED' || a === 'PUSHED_TO_DELIVERY') return 'CONFIRMED';
+  if ((COMPARISON_KEYS as readonly string[]).includes(a) && a !== 'OTHER') return a as ComparisonKey;
+  return 'OTHER';
+};
+
+const zeroBuckets = (): Record<ComparisonKey, number> => {
+  const out = {} as Record<ComparisonKey, number>;
+  for (const k of COMPARISON_KEYS) out[k] = 0;
+  return out;
+};
+
+/**
+ * The figures the agent's own pages derive from a tally — same arithmetic as
+ * pages/agent/Statistics.tsx ("Par lead" mode): confirmed = CONFIRMED + PUSHED,
+ * treated = the six outcomes, ASSIGNED excluded from the denominator.
+ */
+const deriveAgentRates = (byLastAction: Record<string, number>) => {
+  const n = (k: string) => Number(byLastAction[k] || 0);
+  const confirmedTotal = n('CONFIRMED') + n('PUSHED_TO_DELIVERY');
+  const treated =
+    n('CALL_LATER') + n('NO_REPLY') + confirmedTotal +
+    n('WRONG_ORDER') + n('CANCEL_REASON_PRICE') + n('CANCEL_ORDER');
+  const pipeline = treated + n('ASSIGNED');
+  const rate = (num: number, den: number) =>
+    den > 0 ? Number(((num / den) * 100).toFixed(1)) : 0;
+  return {
+    confirmedTotal,
+    treated,
+    pipeline,
+    confirmationRate: rate(confirmedTotal, treated),
+  };
+};
+
+router.get(
+  '/call-center-analytics',
+  authenticate,
+  authorize('SUPER_ADMIN', 'FINANCE_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { startDate, endDate } = req.query as Record<string, string | undefined>;
+    const range = parseDateRange(startDate, endDate);
+    const inRange = (at: Date | null | undefined) => {
+      if (!range) return true;
+      if (!at) return false;
+      if (range.gte && at < range.gte) return false;
+      if (range.lte && at > range.lte) return false;
+      return true;
+    };
+
+    const agentUsers = await prisma.user.findMany({
+      where: { role: { name: 'CALL_CENTER_AGENT' } },
+      include: { profile: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const agentIds = agentUsers.map((a) => a.id);
+    const agentNameOf = new Map<number, string>(
+      agentUsers.map((a) => [a.id, a.profile?.fullName || a.email || `Agent #${a.id}`])
+    );
+
+    const emptyPayload = {
+      generatedAt: new Date(),
+      window: { from: range?.gte ?? null, to: range?.lte ?? null },
+      truncated: { leads: false, history: false, parcels: false },
+      agents: [],
+      totals: null,
+      daily: [],
+    };
+    if (agentIds.length === 0) {
+      return res.json({ status: 'success', data: emptyPayload });
+    }
+
+    // ---- Read 1: the portfolios — leads currently held by each agent, the
+    // exact same predicate and window the inspector's roster uses.
+    const leadWhere: any = { assignedAgentId: { in: agentIds } };
+    if (range) leadWhere.createdAt = range;
+    const portfolioRows = await fetchAllInBatches(
+      (skip, take) => prisma.lead.findMany({
+        where: leadWhere,
+        orderBy: { id: 'asc' },
+        skip,
+        take,
+        select: {
+          id: true, assignedAgentId: true, status: true, createdAt: true,
+          fullName: true, city: true,
+        },
+      }),
+      RECON_LEADS_CAP,
+    );
+
+    // ---- Read 2: everything the agents did, through the same notes filter the
+    // agent pages read through. Both window bases are fetched in one pass
+    // (action date OR lead arrival) and split in memory, so the action-dated
+    // view (what /agent/statistics shows) and the arrival-dated view (the one
+    // comparable to the portfolio) come from identical rows.
+    const historyWhere: any = { changedBy: { in: agentIds }, ...AGENT_HISTORY_NOTES_FILTER };
+    if (range) {
+      historyWhere.AND = [{ OR: [{ createdAt: range }, { lead: { is: { createdAt: range } } }] }];
+    }
+    const historyRows = await fetchAllInBatches(
+      (skip, take) => prisma.leadStatusHistory.findMany({
+        where: historyWhere,
+        // Newest first — tallyAgentHistory takes the first row per lead as the
+        // agent's last word; the id tie-break keeps batch boundaries stable.
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take,
+        select: {
+          changedBy: true, leadId: true, newStatus: true, createdAt: true,
+          lead: {
+            select: {
+              status: true, assignedAgentId: true, createdAt: true,
+              fullName: true, city: true,
+            },
+          },
+        },
+      }),
+      RECON_HISTORY_CAP,
+    );
+
+    // ---- Read 3: the parcels — orders on currently-assigned leads, windowed
+    // on the parcel's own creation date, which is how the agent's Livraison
+    // card counts them. Deliberately NOT windowed on the lead's arrival: a
+    // lead from last month whose parcel shipped this week belongs to this
+    // week's delivery figures on both screens.
+    const parcelWhere: any = {
+      assignedAgentId: { in: agentIds },
+      order: range ? { is: { createdAt: range } } : { isNot: null },
+    };
+    const parcelRows = await fetchAllInBatches(
+      (skip, take) => prisma.lead.findMany({
+        where: parcelWhere,
+        orderBy: { id: 'asc' },
+        skip,
+        take,
+        select: {
+          id: true, assignedAgentId: true, status: true, fullName: true,
+          order: {
+            select: {
+              status: true, totalAmountMad: true, createdAt: true,
+              updatedAt: true, orderNumber: true,
+            },
+          },
+        },
+      }),
+      RECON_PARCELS_CAP,
+    );
+
+    // ---- Group the three reads per agent (order within each group preserved).
+    const portfolioByAgent = new Map<number, typeof portfolioRows>();
+    for (const row of portfolioRows) {
+      if (!row.assignedAgentId) continue;
+      (portfolioByAgent.get(row.assignedAgentId) ??
+        portfolioByAgent.set(row.assignedAgentId, []).get(row.assignedAgentId)!).push(row);
+    }
+    const historyByAgent = new Map<number, typeof historyRows>();
+    for (const row of historyRows) {
+      (historyByAgent.get(row.changedBy) ??
+        historyByAgent.set(row.changedBy, []).get(row.changedBy)!).push(row);
+    }
+    const parcelsByAgent = new Map<number, typeof parcelRows>();
+    for (const row of parcelRows) {
+      if (!row.assignedAgentId) continue;
+      (parcelsByAgent.get(row.assignedAgentId) ??
+        parcelsByAgent.set(row.assignedAgentId, []).get(row.assignedAgentId)!).push(row);
+    }
+
+    // Latest known snapshot of each lead touched by any agent — first-seen wins
+    // because historyRows is newest-first. Used to name the current holder of a
+    // lead the agent worked but no longer owns.
+    const leadSnap = new Map<number, {
+      status: string; assignedAgentId: number | null;
+      fullName: string | null; city: string | null;
+    }>();
+    for (const row of historyRows) {
+      if (!leadSnap.has(row.leadId) && row.lead) {
+        leadSnap.set(row.leadId, {
+          status: row.lead.status,
+          assignedAgentId: row.lead.assignedAgentId ?? null,
+          fullName: row.lead.fullName ?? null,
+          city: row.lead.city ?? null,
+        });
+      }
+    }
+
+    // ---- Per-agent assembly -------------------------------------------------
+    const agents = agentUsers.map((agent) => {
+      const aRows = portfolioByAgent.get(agent.id) || [];
+      const hist = historyByAgent.get(agent.id) || [];
+      const pRows = parcelsByAgent.get(agent.id) || [];
+
+      // Admin view: current status of the current portfolio.
+      const statusBreakdown: Record<string, number> = {};
+      for (const r of aRows) {
+        statusBreakdown[r.status] = (statusBreakdown[r.status] || 0) + 1;
+      }
+      const metrics = buildAgentMetrics(statusBreakdown);
+
+      // Agent view, both window bases.
+      const workRows = range ? hist.filter((r) => inRange(r.createdAt)) : hist;
+      const arrivalRows = range ? hist.filter((r) => inRange(r.lead?.createdAt ?? null)) : hist;
+      const work = tallyAgentHistory(workRows);
+      const arrival = tallyAgentHistory(arrivalRows);
+
+      // Comparison buckets for the three readings.
+      const bucketPortfolio = zeroBuckets();
+      for (const r of aRows) bucketPortfolio[bucketOfCurrentStatus(r.status)] += 1;
+      const bucketArrival = zeroBuckets();
+      for (const a of arrival.lastActionPerLead.values()) bucketArrival[bucketOfLastAction(a)] += 1;
+      const bucketAction = zeroBuckets();
+      for (const a of work.lastActionPerLead.values()) bucketAction[bucketOfLastAction(a)] += 1;
+
+      // Reconciliation: portfolio (set A) vs arrival-windowed work (set B) —
+      // the only pair windowed on the same field, so every member of A∪B falls
+      // in exactly one of the four causes below.
+      const aMap = new Map(aRows.map((r) => [r.id, r]));
+      let agree = 0;
+      let conflictTotal = 0;
+      let assignedNotWorked = 0;
+      let backInPool = 0;
+      let heldByOther = 0;
+      const conflictPairs = new Map<string, { from: ComparisonKey; to: ComparisonKey; count: number }>();
+      const holderCounts = new Map<number, number>();
+      const samples = {
+        assignedNotWorked: [] as any[],
+        workedNotAssigned: [] as any[],
+        conflicts: [] as any[],
+      };
+
+      for (const [leadId, lastAction] of arrival.lastActionPerLead) {
+        const held = aMap.get(leadId);
+        if (!held) {
+          const snap = leadSnap.get(leadId);
+          const holderId = snap?.assignedAgentId ?? null;
+          if (holderId === null) backInPool += 1;
+          else {
+            heldByOther += 1;
+            holderCounts.set(holderId, (holderCounts.get(holderId) || 0) + 1);
+          }
+          if (samples.workedNotAssigned.length < RECON_SAMPLE_CAP) {
+            samples.workedNotAssigned.push({
+              id: leadId,
+              name: snap?.fullName ?? null,
+              city: snap?.city ?? null,
+              lastAction,
+              status: snap?.status ?? null,
+              holderId,
+              holderName: holderId === null
+                ? null
+                : agentNameOf.get(holderId) || `#${holderId}`,
+            });
+          }
+          continue;
+        }
+        const current = bucketOfCurrentStatus(held.status);
+        const past = bucketOfLastAction(lastAction);
+        if (current === past) {
+          agree += 1;
+        } else {
+          conflictTotal += 1;
+          const key = `${past}→${current}`;
+          const entry = conflictPairs.get(key) || { from: past, to: current, count: 0 };
+          entry.count += 1;
+          conflictPairs.set(key, entry);
+          if (samples.conflicts.length < RECON_SAMPLE_CAP) {
+            samples.conflicts.push({
+              id: leadId,
+              name: held.fullName,
+              city: held.city,
+              lastAction,
+              status: held.status,
+            });
+          }
+        }
+      }
+
+      for (const r of aRows) {
+        if (arrival.lastActionPerLead.has(r.id)) continue;
+        assignedNotWorked += 1;
+        if (samples.assignedNotWorked.length < RECON_SAMPLE_CAP) {
+          samples.assignedNotWorked.push({
+            id: r.id,
+            name: r.fullName,
+            city: r.city,
+            status: r.status,
+            createdAt: r.createdAt,
+          });
+        }
+      }
+
+      const union = agree + conflictTotal + assignedNotWorked + backInPool + heldByOther;
+      const matchRate = union > 0 ? Number(((agree / union) * 100).toFixed(1)) : 100;
+
+      // Parcels: both formulas over the same orders, plus the lead⇄order
+      // desynchronisation check ("is the info correct or not").
+      const parcelByStatus: Record<string, number> = {};
+      let revenueTotal = 0;
+      let revenueDelivered = 0;
+      let desync = 0;
+      let pendingPairs = 0;
+      const desyncSamples: any[] = [];
+      for (const r of pRows) {
+        const o = r.order!;
+        const st = (o.status || 'UNKNOWN').toUpperCase();
+        parcelByStatus[st] = (parcelByStatus[st] || 0) + 1;
+        const amount = Number(o.totalAmountMad) || 0;
+        revenueTotal += amount;
+        if (st === 'DELIVERED') revenueDelivered += amount;
+        if (st === 'PENDING') {
+          // The normal freshly-pushed pair (lead PUSHED_TO_DELIVERY / order
+          // PENDING) — expected, counted separately, never flagged.
+          pendingPairs += 1;
+        } else if ((r.status || '').toUpperCase() !== st) {
+          desync += 1;
+          if (desyncSamples.length < RECON_SAMPLE_CAP) {
+            desyncSamples.push({
+              id: r.id,
+              name: r.fullName,
+              orderNumber: o.orderNumber,
+              leadStatus: r.status,
+              orderStatus: o.status,
+            });
+          }
+        }
+      }
+      const parcelsTotal = pRows.length;
+      const delivered = parcelByStatus.DELIVERED || 0;
+      const failed = DELIVERY_FAILED_STATUSES.reduce(
+        (sum, s) => sum + (parcelByStatus[s] || 0), 0
+      );
+      const rate = (num: number, den: number) =>
+        den > 0 ? Number(((num / den) * 100).toFixed(1)) : 0;
+
+      return {
+        id: agent.id,
+        fullName: agentNameOf.get(agent.id),
+        email: agent.email,
+        phone: agent.phone,
+        isActive: agent.isActive,
+        createdAt: agent.createdAt,
+        // What /admin/call-center-inspector shows for this agent.
+        portfolio: { total: aRows.length, statusBreakdown, metrics },
+        // What /agent/statistics shows (action-dated) — plus the same tally
+        // re-windowed on lead arrival so it can be compared 1:1 with the
+        // portfolio.
+        work: {
+          totalActions: work.totalActions,
+          leadsWorked: work.leadsWorked,
+          claimed: work.claimed,
+          byAction: work.byAction,
+          byLead: work.byLead,
+          byLastAction: work.byLastAction,
+          ...deriveAgentRates(work.byLastAction),
+        },
+        workByArrival: {
+          totalActions: arrival.totalActions,
+          leadsWorked: arrival.leadsWorked,
+          claimed: arrival.claimed,
+          byLastAction: arrival.byLastAction,
+          ...deriveAgentRates(arrival.byLastAction),
+        },
+        reconciliation: {
+          agree,
+          conflictTotal,
+          assignedNotWorked,
+          workedNotAssigned: backInPool + heldByOther,
+          backInPool,
+          heldByOther,
+          union,
+          matchRate,
+          conflicts: [...conflictPairs.values()].sort((a, b) => b.count - a.count),
+          holders: [...holderCounts.entries()]
+            .map(([holderId, count]) => ({
+              holderId,
+              holderName: agentNameOf.get(holderId) || `#${holderId}`,
+              count,
+            }))
+            .sort((a, b) => b.count - a.count),
+          buckets: COMPARISON_KEYS.map((key) => ({
+            key,
+            portfolio: bucketPortfolio[key],
+            agentArrival: bucketArrival[key],
+            agentAction: bucketAction[key],
+            delta: bucketPortfolio[key] - bucketArrival[key],
+          })),
+          samples,
+        },
+        parcels: {
+          total: parcelsTotal,
+          byStatus: parcelByStatus,
+          delivered,
+          failed,
+          inTransit: Math.max(0, parcelsTotal - delivered - failed),
+          revenueTotal: Math.round(revenueTotal),
+          revenueDelivered: Math.round(revenueDelivered),
+          // The agent's Livraison formula: delivered over every parcel.
+          agentDeliveryRate: rate(delivered, parcelsTotal),
+          // The inspector's formula: delivered over parcels that finished.
+          adminDeliveryRate: rate(delivered, delivered + failed),
+          desync,
+          pendingPairs,
+          desyncSamples,
+        },
+      };
+    }).sort((a, b) => b.portfolio.total - a.portfolio.total);
+
+    // ---- Roster totals ------------------------------------------------------
+    const totals = (() => {
+      const sum = (fn: (a: (typeof agents)[number]) => number) =>
+        agents.reduce((s, a) => s + fn(a), 0);
+      const bucketTotals = COMPARISON_KEYS.map((key) => ({
+        key,
+        portfolio: sum((a) => a.reconciliation.buckets.find((b) => b.key === key)!.portfolio),
+        agentArrival: sum((a) => a.reconciliation.buckets.find((b) => b.key === key)!.agentArrival),
+        agentAction: sum((a) => a.reconciliation.buckets.find((b) => b.key === key)!.agentAction),
+      })).map((b) => ({ ...b, delta: b.portfolio - b.agentArrival }));
+      const agree = sum((a) => a.reconciliation.agree);
+      const union = sum((a) => a.reconciliation.union);
+      const confirmed = sum((a) => a.portfolio.metrics.confirmed);
+      const treatedAdmin = sum((a) => a.portfolio.metrics.treated);
+      const confirmedAgent = sum((a) => a.work.confirmedTotal);
+      const treatedAgent = sum((a) => a.work.treated);
+      return {
+        agents: agents.length,
+        activeAgents: agents.filter((a) => a.isActive).length,
+        portfolioTotal: sum((a) => a.portfolio.total),
+        leadsWorked: sum((a) => a.workByArrival.leadsWorked),
+        leadsWorkedAction: sum((a) => a.work.leadsWorked),
+        totalActions: sum((a) => a.work.totalActions),
+        agree,
+        conflictTotal: sum((a) => a.reconciliation.conflictTotal),
+        assignedNotWorked: sum((a) => a.reconciliation.assignedNotWorked),
+        backInPool: sum((a) => a.reconciliation.backInPool),
+        heldByOther: sum((a) => a.reconciliation.heldByOther),
+        union,
+        matchRate: union > 0 ? Number(((agree / union) * 100).toFixed(1)) : 100,
+        adminConfirmed: confirmed,
+        adminTreated: treatedAdmin,
+        adminConfirmationRate:
+          treatedAdmin > 0 ? Number(((confirmed / treatedAdmin) * 100).toFixed(1)) : 0,
+        agentConfirmed: confirmedAgent,
+        agentTreated: treatedAgent,
+        agentConfirmationRate:
+          treatedAgent > 0 ? Number(((confirmedAgent / treatedAgent) * 100).toFixed(1)) : 0,
+        parcelsTotal: sum((a) => a.parcels.total),
+        delivered: sum((a) => a.parcels.delivered),
+        failed: sum((a) => a.parcels.failed),
+        revenueDelivered: sum((a) => a.parcels.revenueDelivered),
+        desync: sum((a) => a.parcels.desync),
+        buckets: bucketTotals,
+      };
+    })();
+
+    // ---- Daily series (platform-wide, local wall-clock like agent-statistics)
+    const dayKey = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const blankDay = () => ({
+      actions: 0, claims: 0, confirmations: 0, leadsIn: 0,
+      parcelsCreated: 0, delivered: 0,
+    });
+    const days = new Map<string, ReturnType<typeof blankDay>>();
+    const dayOf = (d: Date) => {
+      const key = dayKey(d);
+      const bucket = days.get(key) || blankDay();
+      days.set(key, bucket);
+      return bucket;
+    };
+
+    for (const row of historyRows) {
+      if (range && !inRange(row.createdAt)) continue;
+      const b = dayOf(row.createdAt);
+      b.actions += 1;
+      if (row.newStatus === 'ASSIGNED') b.claims += 1;
+      if (row.newStatus === 'CONFIRMED' || row.newStatus === 'PUSHED_TO_DELIVERY') {
+        b.confirmations += 1;
+      }
+    }
+    for (const row of portfolioRows) dayOf(row.createdAt).leadsIn += 1;
+    for (const row of parcelRows) {
+      const o = row.order!;
+      dayOf(o.createdAt).parcelsCreated += 1;
+      // Best available timestamp for the delivery itself: the order's last
+      // update once it reads DELIVERED. Clamped to the window — an order
+      // created inside it can be delivered after it.
+      if ((o.status || '').toUpperCase() === 'DELIVERED' && inRange(o.updatedAt)) {
+        dayOf(o.updatedAt).delivered += 1;
+      }
+    }
+
+    // Gap-fill inside an explicit window of readable width; otherwise only the
+    // days that carry data — same 180-day rule as /leads/agent-statistics.
+    const daily: any[] = [];
+    const sortedKeys = [...days.keys()].sort();
+    if (sortedKeys.length > 0) {
+      const first = range?.gte ? new Date(range.gte) : new Date(`${sortedKeys[0]}T00:00:00`);
+      const last = new Date(range?.lte ? Math.min(range.lte.getTime(), Date.now()) : Date.now());
+      first.setHours(0, 0, 0, 0);
+      const spanDays = Math.floor((last.getTime() - first.getTime()) / 86400000) + 1;
+      if (range && spanDays > 0 && spanDays <= 180) {
+        for (const cursor = new Date(first); cursor <= last; cursor.setDate(cursor.getDate() + 1)) {
+          const key = dayKey(cursor);
+          daily.push({ date: key, ...(days.get(key) || blankDay()) });
+        }
+      } else {
+        for (const key of sortedKeys) daily.push({ date: key, ...days.get(key)! });
+      }
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        generatedAt: new Date(),
+        window: { from: range?.gte ?? null, to: range?.lte ?? null },
+        truncated: {
+          leads: portfolioRows.length >= RECON_LEADS_CAP,
+          history: historyRows.length >= RECON_HISTORY_CAP,
+          parcels: parcelRows.length >= RECON_PARCELS_CAP,
+        },
+        comparisonKeys: COMPARISON_KEYS,
+        agents,
+        totals,
+        daily,
+      },
     });
   })
 );
@@ -3512,6 +4087,19 @@ router.post(
   })
 );
 
+router.post(
+  '/security/unblock-all',
+  authenticate,
+  authorize('SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    clearAllRateLimitBlocks();
+    res.json({
+      status: 'success',
+      message: 'All rate-limit blocks cleared'
+    });
+  })
+);
+
 // ========== INFLUENCER INSPECTOR ==========
 router.get(
   '/influencer-inspector',
@@ -4230,6 +4818,14 @@ router.post(
       return;
     }
 
+    if (/[\r\n:]/.test(password)) {
+      res.status(400).json({ 
+        status: 'error', 
+        message: 'Le mot de passe ne peut pas contenir de deux-points ou de retours à la ligne.' 
+      });
+      return;
+    }
+
     const email = `${username}@silacod.com`;
 
     // Check if email already exists in DB
@@ -4281,6 +4877,14 @@ router.post(
 
     if (!username || !password) {
       res.status(400).json({ status: 'error', message: 'Nom d\'utilisateur et nouveau mot de passe sont requis' });
+      return;
+    }
+
+    if (/[\r\n:]/.test(password) || !/^[a-z0-9._-]+$/.test(username)) {
+      res.status(400).json({ 
+        status: 'error', 
+        message: 'Nom d\'utilisateur ou mot de passe invalide (caractères interdits détectés).' 
+      });
       return;
     }
 
