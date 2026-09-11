@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ArrowDownToLine, ArrowUpRight, Banknote, BarChart3, Bell, Boxes, Check, ChevronDown, CircleHelp, Clock, Eye, Globe, LayoutDashboard, LifeBuoy, Link2, ListOrdered, MessageCircle, Package, Phone, Plus, QrCode, Search, ShoppingCart, Smartphone, TrendingUp, Truck, User, Users, Wallet } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpRight, Banknote, BarChart3, Bell, Boxes, Check, ChevronDown, CircleHelp, Clock, Eye, Globe, LayoutDashboard, LifeBuoy, Link2, ListOrdered, MessageCircle, Package, Phone, Plus, QrCode, Search, ShieldAlert, ShoppingCart, Smartphone, TrendingUp, Truck, User, Users, Wallet } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { APK_RELEASE } from './mobileAppRelease';
 import './MobileAppDownload.css';
@@ -33,6 +33,7 @@ const content = {
       nav: ['Accueil', 'Commandes', 'Produits', 'Portefeuille', 'Profil'], currency: 'DH',
       leadNames: ['Youssef B.', 'Salma E.', 'Mehdi A.'], leadCities: ['Casablanca', 'Marrakech', 'Agadir'],
       leadAgo: ['il y a 5 min', 'il y a 22 min', 'il y a 1 h'],
+      fraud: 'Numéro à 2 noms',
     },
     install: 'Première installation ? On vous guide.', steps: [
       ['Téléchargez le fichier', 'Ouvrez cette page sur votre téléphone Android et appuyez sur le bouton de téléchargement.'],
@@ -68,6 +69,7 @@ const content = {
       nav: ['Home', 'Orders', 'Products', 'Wallet', 'Profile'], currency: 'DH',
       leadNames: ['Youssef B.', 'Salma E.', 'Mehdi A.'], leadCities: ['Casablanca', 'Marrakech', 'Agadir'],
       leadAgo: ['5 min ago', '22 min ago', '1 h ago'],
+      fraud: 'One number, 2 names',
     },
     install: 'First installation? Let’s walk through it.', steps: [
       ['Download the file', 'Open this page on your Android phone and tap the download button.'],
@@ -103,6 +105,7 @@ const content = {
       nav: ['الرئيسية', 'الطلبات', 'المنتجات', 'المحفظة', 'الملف'], currency: 'د.م.',
       leadNames: ['يوسف ب.', 'سلمى إ.', 'مهدي أ.'], leadCities: ['الدار البيضاء', 'مراكش', 'أكادير'],
       leadAgo: ['قبل 5 د', 'قبل 22 د', 'قبل ساعة'],
+      fraud: 'رقم باسمين',
     },
     install: 'أول تثبيت؟ نرافقك خطوة بخطوة.', steps: [
       ['حمّل الملف', 'افتح هذه الصفحة على هاتف Android واضغط على زر التحميل.'],
@@ -126,7 +129,8 @@ const demo = {
   orderStats: ['320', '196', '24', '38 400'],
   linkStats: ['4 820', '3 106', '742', '196', '6,3%', '9 240'],
   linkRows: [['246', '184', '42', '16'], ['128', '97', '23', '8']],
-  leadPhones: ['06 •• •• •• 42', '06 •• •• •• 17', '06 •• •• •• 08'],
+  // Sequential digits so the numbers read as placeholders and cannot reach a real subscriber.
+  leadPhones: ['06 12 34 56 78', '06 23 45 67 89', '06 34 56 78 90'],
   leadPrices: ['349', '289', '420'],
 };
 
@@ -186,6 +190,7 @@ export default function MobileAppDownload() {
                         <span className="sila-app__lead-price" dir="ltr">{demo.leadPrices[i]} {sc.currency}</span>
                       </div>
                       <p className="sila-app__lead-product">{name}</p>
+                      {i === 2 && <span className="sila-app__fraud"><ShieldAlert size={8} aria-hidden="true" />{sc.fraud} · 2</span>}
                       <div className="sila-app__lead-foot">
                         <span className={`sila-app__order-status sila-app__order-status--${i}`}>{copy.statuses[i]}</span>
                         <small><Clock size={7} aria-hidden="true" />{sc.leadAgo[i]}</small>

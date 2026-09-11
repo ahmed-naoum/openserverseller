@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { body, query, validationResult } from 'express-validator';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
-import { ipOrderCountsFor, fraudThreshold } from '../lib/leadFraud.js';
+import { fraudThreshold, leadFraudSignalsFor } from '../lib/leadFraud.js';
 import axios from 'axios';
 import { getSecret } from '../lib/secretStore.js';
 import { toColiatyCityName } from '../lib/coliatyCityName.js';
@@ -642,10 +642,12 @@ router.get(
     // — the same count the automatic ban fires on, so a row badged SUSPECT here
     // is exactly a row that tripped (or would trip) the ban. One query for the
     // page; see lib/leadFraud.ts for why it is not a plain "last 24h" count.
-    const [ipCounts, ipThreshold] = await Promise.all([
-      ipOrderCountsFor(leads as any[]),
-      fraudThreshold(),
-    ]);
+    //
+    // Scored here rather than at checkout, and reported rather than enforced:
+    // the row is always captured and always shown, carrying the reasons it
+    // looks wrong so the agent who calls the customer can judge it.
+    const ipThreshold = await fraudThreshold();
+    const fraudSignals = await leadFraudSignalsFor(leads as any[], ipThreshold);
 
     res.json({
       status: 'success',
@@ -707,8 +709,13 @@ router.get(
           source: l.source,
           ipAddress: l.ipAddress,
           ipCountry: l.ipCountry,
-          ipOrderCount: ipCounts.get(l.id) || 0,
-          ipSuspect: ipThreshold > 0 && (ipCounts.get(l.id) || 0) >= ipThreshold,
+          // Kept under their original names because several screens already
+          // read them; they are now just the IP slice of the fuller scoring.
+          ipOrderCount: fraudSignals.get(l.id)?.counts.ipOrders || 0,
+          ipSuspect: fraudSignals.get(l.id)?.codes.includes('IP_BURST') === true,
+          fraudSignals: fraudSignals.get(l.id)?.codes ?? [],
+          fraudSeverity: fraudSignals.get(l.id)?.severity ?? 'NONE',
+          fraudCounts: fraudSignals.get(l.id)?.counts ?? null,
           createdAt: l.createdAt,
           // --- Additional detail (already loaded above, previously dropped) ---
           sourceMode: l.sourceMode,

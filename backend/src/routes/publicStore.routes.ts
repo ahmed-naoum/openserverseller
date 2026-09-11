@@ -50,14 +50,17 @@ function devSlug(req: Request): string | undefined {
   return slug || undefined;
 }
 
+/**
+ * Same backstop as the landing checkout's `orderRateLimiter`, and keyed the same
+ * way and for the same reason: `getClientIp` (CF-Connecting-IP first), never the
+ * visitor-controlled X-Forwarded-For and never with the User-Agent mixed in,
+ * because either of those let a caller mint a fresh bucket per request. The fraud
+ * threshold, not this number, is what actually stops a spraying address.
+ */
 const checkoutRateLimiter = rateLimit({
   windowMs: 24 * 60 * 60 * 1000,
   max: 30,
-  keyGenerator: (req) => {
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
-    const userAgent = req.headers['user-agent'] || 'unknown';
-    return `${ip}-${userAgent}`;
-  },
+  keyGenerator: (req) => getClientIp(req) || 'unknown',
   handler: (_req, res) => {
     res.status(429).json({
       status: 'error',

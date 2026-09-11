@@ -739,6 +739,10 @@ export async function executeStoreCheckout(
     throw new AppException(404, 'Cette boutique est actuellement indisponible');
   }
 
+  // As on the landing checkout: no fraud check here. Suspect orders are saved
+  // and badged with their reason on the leads screens, never refused at the
+  // form — see the note beside the landing checkout in public.routes.ts.
+
   const productIds = cartItems.map((item) => item.productId);
   // Scoped to what this shop actually sells: its own products, or the starter
   // catalogue while it has none. A basket naming another shop's product, a

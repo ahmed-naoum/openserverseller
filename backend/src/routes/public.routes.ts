@@ -288,15 +288,28 @@ router.get(
   })
 );
 
-// Advanced rate limiter for orders (max 3 per day per IP + User Agent)
+/**
+ * Backstop cap on orders from one address per day.
+ *
+ * This is NOT the fraud control — `maybeAutoBanForOrders` stops a spraying
+ * address at `fraudIpThreshold` (default 3), long before 20. This limit is what
+ * still holds when an admin sets that threshold to 0 and turns the fraud
+ * feature off, so it is deliberately loose enough never to refuse a genuine
+ * shared-NAT customer.
+ *
+ * The key is `getClientIp`, not the raw X-Forwarded-For it used to read, and
+ * not the User-Agent it used to concatenate. Both of those were free to change
+ * per request: behind Cloudflare a visitor sets XFF themselves, so one header
+ * bought a fresh bucket and made the cap unenforceable, and mixing the UA in
+ * meant even rotating the UA string alone was enough. getClientIp prefers
+ * CF-Connecting-IP, which is also what gets stored on the lead and what the ban
+ * lists match on — so the bucket, the banned value and `lead.ipAddress` are now
+ * the same string, and a cap hit, a badge and a ban all refer to one person.
+ */
 const orderRateLimiter = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
   max: 20,
-  keyGenerator: (req) => {
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
-    const userAgent = req.headers['user-agent'] || 'unknown';
-    return `${ip}-${userAgent}`;
-  },
+  keyGenerator: (req) => getClientIp(req) || 'unknown',
   handler: (req, res, next, options) => {
     res.status(429).json({
       status: 'error',
@@ -559,6 +572,14 @@ router.post(
       throw new AppException(404, 'Referral link or product not found or inactive');
     }
 
+    // No fraud check runs here on purpose. Every signal this system has — a
+    // reused number, a repeated name, a busy address, a duplicated browser
+    // string — is scored when a leads list is rendered (lib/leadFraud.ts), not
+    // when the order is placed, so a suspected order is still captured and
+    // still shown, carrying the reason it looks wrong. Refusing at the form
+    // would hide the evidence from the only people able to judge it, and would
+    // cost a real sale every time the guess was wrong.
+    //
     // Create the lead for the vendor
     const lead = await prisma.lead.create({
       data: {

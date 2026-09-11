@@ -1,3 +1,4 @@
+import FraudBadges from '../../components/leads/FraudBadges';
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -1747,7 +1748,8 @@ export default function VendorLeads() {
                     // strips it from this payload, and the ban below is sent by
                     // lead id, so there is nothing to show and nothing to typo.
                     const ipOrderCount = Number(rowLead?.ipOrderCount || 0);
-                    const ipSuspect = rowLead?.ipSuspect === true;
+                    const fraudSignals = rowLead?.fraudSignals as string[] | undefined;
+                    const fraudCounts = rowLead?.fraudCounts ?? null;
                     const ipBanned = rowLead?.ipBanned === true;
                     const canBanIp = rowLead?.canBanIp === true && sheetLeadId !== null;
 
@@ -1845,21 +1847,11 @@ export default function VendorLeads() {
                                   {t('removed_from_sheet_short', 'leads', 'Retiré de la feuille')}
                                 </span>
                               )}
-                              {/* Several orders off the same connection inside
-                                  24h — the exact count the automatic ban fires
-                                  on. A signal, not a verdict: a family, an
-                                  office and a whole mobile cell share one
-                                  address, so the row is left where it is and
-                                  the seller decides. */}
-                              {ipSuspect && (
-                                <span
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full border border-red-100 text-[9px] font-black uppercase tracking-wider"
-                                  title={t('ip_suspect_tooltip', 'leads', '{count} commandes sont parties de la même connexion en 24 h — vérifiez avant de confirmer.').replace('{count}', String(ipOrderCount))}
-                                >
-                                  <ShieldAlert className="w-2.5 h-2.5" />
-                                  {t('ip_fake_short', 'leads', 'Fake lead')}
-                                </span>
-                              )}
+                              {/* Why this row looks fake, one chip per reason.
+                                  The order itself is never hidden or removed:
+                                  the agent about to call the customer is the
+                                  only one who can settle it. */}
+                              <FraudBadges signals={fraudSignals as any} counts={fraudCounts} t={t} />
                               {ipBanned && (
                                 <span
                                   className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full border border-slate-200 text-[9px] font-black uppercase tracking-wider"

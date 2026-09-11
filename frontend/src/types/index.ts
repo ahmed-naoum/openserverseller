@@ -113,6 +113,29 @@ export interface ProductImage {
   sortOrder: number;
 }
 
+/**
+ * Why a lead looks fake. Mirrors `FraudSignalCode` in
+ * backend/src/lib/leadFraud.ts — keep the two in step.
+ *
+ * NAME_REUSED and UA_CLUSTER are not "the name repeated" and "the browser
+ * repeated": on their own those mean nothing here. They are one name across
+ * several DIFFERENT numbers, and one browser string on one ADDRESS.
+ */
+export type FraudSignalCode =
+  | 'PHONE_IDENTITY'
+  | 'PHONE_REPEAT'
+  | 'NAME_REUSED'
+  | 'IP_BURST'
+  | 'UA_CLUSTER';
+
+export interface LeadFraudCounts {
+  phoneLeads: number;
+  phoneIdentities: number;
+  namePhones: number;
+  ipOrders: number;
+  uaCluster: number;
+}
+
 export interface Lead {
   id: string;
   fullName: string;
@@ -129,6 +152,20 @@ export interface Lead {
   ipAddress?: string | null;
   ipCountry?: string | null;
   userAgent?: string | null;
+  /**
+   * Fraud signals, recomputed per request and never stored on the row — see
+   * backend/src/lib/leadFraud.ts.
+   *
+   * Reported, never enforced: a flagged order is still captured and still
+   * shown, carrying the reasons it looks wrong. `ipOrderCount` / `ipSuspect`
+   * predate the fuller scoring and are kept under their old names because
+   * several screens read them; they are now the IP slice of `fraudSignals`.
+   */
+  ipOrderCount?: number;
+  ipSuspect?: boolean;
+  fraudSignals?: FraudSignalCode[];
+  fraudSeverity?: 'NONE' | 'WATCH' | 'STRONG';
+  fraudCounts?: LeadFraudCounts | null;
   createdAt: string;
   callbackAt?: string | Date;
   /**

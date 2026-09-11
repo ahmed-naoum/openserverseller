@@ -1,3 +1,4 @@
+import FraudBadges from '../../components/leads/FraudBadges';
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
@@ -1255,6 +1256,11 @@ export default function AdminLeads() {
                               <a href={`tel:${lead.phone}`} className="flex items-center gap-1 hover:text-primary-600 transition-colors">
                                 <Phone className="w-2.5 h-2.5" /> {lead.phone}
                               </a>
+                              {/* Sits beside the number rather than with the IP
+                                  badge below: these are reported for a lead
+                                  with no recorded address at all, which the IP
+                                  block below is not. */}
+                              <FraudBadges signals={lead.fraudSignals} counts={lead.fraudCounts} />
                               {lead.whatsapp && (
                                 <a
                                   href={`https://wa.me/${String(lead.whatsapp).replace(/[^0-9]/g, '').replace(/^0/, '212')}`}
@@ -1286,20 +1292,6 @@ export default function AdminLeads() {
                                 >
                                   <Ban className="w-2.5 h-2.5" />
                                 </button>
-                                {/* Orders that had come from this address in the
-                                    24h ending at this one — the same count the
-                                    automatic ban fires on, so a badge here marks
-                                    a row that tripped the threshold (or would
-                                    have, had it been switched on). */}
-                                {lead.ipSuspect && (
-                                  <span
-                                    className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full border border-red-100 text-[9px] font-black uppercase tracking-wider font-sans"
-                                    title={`${lead.ipOrderCount} commandes depuis cette connexion en 24 h`}
-                                  >
-                                    <ShieldAlert className="w-2.5 h-2.5" />
-                                    Fake lead
-                                  </span>
-                                )}
                               </div>
                             )}
                           </div>

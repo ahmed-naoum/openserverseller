@@ -38,7 +38,11 @@
 .sila-app__phone-camera { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #171929; inset-inline-start: calc(50% - 4.5px); top: 13px; box-shadow: inset 0 0 0 2px #33374d; }
 .sila-app__phone-brand { display: flex; gap: 6px; align-items: center; font-weight: 800; font-size: 14px; letter-spacing: .045em; }
 .sila-app__phone-greeting { color: #6a7089; font-size: 10px; margin: 15px 0; }
-.sila-app__screen { min-height: 310px; }
+/* Fixed viewport, clipped at the bottom bar. A min-height tuned to one
+   language would spill in another: Arabic and French labels differ in
+   length, so the screen gets the real screen's behaviour instead - the
+   list simply continues below the fold. */
+.sila-app__screen { height: 364px; overflow: hidden; }
 .sila-app__order { display: flex; align-items: center; gap: 7px; background: #fff; border: 1px solid #e9ebf0; padding: 10px 7px; border-radius: 10px; margin-top: 6px; }
 .sila-app__product { width: 29px; height: 31px; border-radius: 7px; display: grid; place-items: center; flex-shrink: 0; background: #ffe7dc; color: #b8502d; }
 .sila-app__product--1 { background: #e7e5fa; color: #69608b; }
@@ -131,7 +135,6 @@
 /* ---- Phone screen: mirrors the real SILACOD Android app (demo figures) ---- */
 .sila-app__phone-bell { margin-left: auto; position: relative; border: 1px solid #dddfea; background: #fff; border-radius: 50%; height: 27px; width: 27px; display: grid; place-items: center; color: #2e315e; }
 .sila-app__phone-bell i { position: absolute; top: -4px; inset-inline-end: -4px; background: #ef4444; color: #fff; font-style: normal; font-size: 6px; font-weight: 700; line-height: 1; padding: 2px 3px; border-radius: 7px; }
-.sila-app__screen { min-height: 318px; }
 
 /* Accueil - balance card */
 .sila-app__wallet { background: #2e315e; color: #fff; border-radius: 15px; padding: 13px; box-shadow: 0 6px 18px #30345e1a; }
@@ -236,7 +239,6 @@
 
 /* Real-phone proportions leave room for the full Accueil screen. */
 .sila-app__phone-greeting { margin: 9px 0 11px; }
-.sila-app__screen { min-height: 352px; }
 .sila-app__quick i { width: 28px; height: 28px; }
 .sila-app__quick small { font-size: 6px; }
 .sila-app__chips span { padding: 4px 0; font-size: 7px; }
@@ -257,3 +259,20 @@
 .sila-app__lead-foot small { display: flex; align-items: center; gap: 3px; font-size: 6px; color: #a2a7ba; }
 .sila-app__lead .sila-app__product { width: 24px; height: 24px; border-radius: 6px; }
 .sila-app__lead .sila-app__order-status { margin-inline-start: 0; }
+
+/* Three lead cards plus the stat row must still clear the bottom bar. */
+.sila-app__lead { padding: 7px; margin-top: 5px; }
+.sila-app__lead-product { margin-top: 5px; padding-top: 4px; }
+.sila-app__lead-foot { margin-top: 5px; }
+.sila-app__statbar { margin-top: 7px; }
+.sila-app__statbox { padding: 5px 3px; }
+
+/* Fraud chip - the solid red one, matching the web FraudBadges PHONE_IDENTITY. */
+.sila-app__fraud { display: inline-flex; align-items: center; gap: 3px; margin-top: 5px; background: #dc2626; border: 1px solid #b91c1c; color: #fff; font-size: 6px; font-weight: 800; letter-spacing: .03em; padding: 2px 5px; border-radius: 999px; white-space: nowrap; }
+
+/* Three lead cards, one carrying a fraud chip, must clear the bottom bar. */
+.sila-app__lead { padding: 6px; margin-top: 4px; }
+.sila-app__lead-product { margin-top: 4px; padding-top: 3px; }
+.sila-app__lead-foot { margin-top: 4px; }
+.sila-app__statbar { margin-top: 6px; }
+.sila-app__search { padding: 6px 8px; }

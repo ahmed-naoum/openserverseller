@@ -3,7 +3,7 @@ import { body, validationResult } from 'express-validator';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { asyncHandler, AppException } from '../middleware/errorHandler.js';
-import { ipOrderCountsFor, fraudThreshold } from '../lib/leadFraud.js';
+import { fraudThreshold, leadFraudSignalsFor } from '../lib/leadFraud.js';
 import { addVendorBan, removeVendorBan, bannedValuesFor } from '../lib/vendorIpBan.js';
 import { normalizeBanValue, isValidBanValue } from '../lib/ipBan.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -1719,6 +1719,17 @@ router.get(
                     // the response is written — a seller's browser never sees an
                     // address (see that pass for why).
                     ipAddress: true,
+                    // Same: needed to score the phone-identity signal, removed
+                    // again afterwards. The number still reaches the client as
+                    // `customerPhone` on the row above, so this is only about
+                    // not sending it twice under two names.
+                    phone: true,
+                    // Also scoring inputs, also stripped below: the name feeds
+                    // the reused-identity signal, the browser string the
+                    // one-device signal. The name still reaches the client as
+                    // `customerName` on the row above.
+                    fullName: true,
+                    userAgent: true,
                     // The pack the customer picked. The order carries its own
                     // `productVariant` copy, which an agent may have retyped on
                     // the delivery form — these four are what the landing page
@@ -2059,33 +2070,57 @@ router.get(
     // address in every seller's browser to no end, and invite a hand-typed ban
     // on a neighbouring address that belongs to someone else.
     {
-      const ipByLead = new Map<number, { ip: string | null; createdAt: Date }>();
-      for (const l of leads as any[]) {
-        ipByLead.set(l.id, { ip: l.ipAddress ?? null, createdAt: l.createdAt });
-      }
+      type ScoreRef = {
+        ip: string | null;
+        phone: string | null;
+        fullName: string | null;
+        userAgent: string | null;
+        createdAt: Date;
+      };
+      const ipByLead = new Map<number, ScoreRef>();
+      const take = (l: any): ScoreRef => ({
+        ip: l.ipAddress ?? null,
+        phone: l.phone ?? null,
+        fullName: l.fullName ?? null,
+        userAgent: l.userAgent ?? null,
+        createdAt: l.createdAt,
+      });
+      for (const l of leads as any[]) ipByLead.set(l.id, take(l));
       for (const c of commissions as any[]) {
         const cl = c.order?.lead;
-        if (cl?.id) ipByLead.set(cl.id, { ip: cl.ipAddress ?? null, createdAt: cl.createdAt });
+        if (cl?.id) ipByLead.set(cl.id, take(cl));
       }
 
-      const refs = [...ipByLead.entries()]
-        .filter(([, v]) => v.ip)
-        .map(([id, v]) => ({ id, ipAddress: v.ip, createdAt: v.createdAt }));
+      // Scored over every lead, not just the ones with an address: a row that
+      // has no recorded IP — an import, or a checkout behind a proxy we could
+      // not read — is still judged on the signals that do not need one.
+      const scoreRefs = [...ipByLead.entries()].map(([id, v]) => ({
+        id,
+        ipAddress: v.ip,
+        phone: v.phone,
+        fullName: v.fullName,
+        userAgent: v.userAgent,
+        createdAt: v.createdAt,
+      }));
+      const banRefs = scoreRefs.filter((r) => r.ipAddress);
 
-      const [counts, bannedValues, threshold] = await Promise.all([
-        ipOrderCountsFor(refs),
-        bannedValuesFor(userId, refs.map((r) => r.ipAddress)),
-        fraudThreshold(),
+      const threshold = await fraudThreshold();
+      const [signals, bannedValues] = await Promise.all([
+        leadFraudSignalsFor(scoreRefs, threshold),
+        bannedValuesFor(userId, banRefs.map((r) => r.ipAddress)),
       ]);
 
       for (const row of combined as any[]) {
         const rowLead = row.order?.lead;
         if (!rowLead?.id) continue;
         const ip = ipByLead.get(rowLead.id)?.ip || null;
-        const count = ip ? counts.get(rowLead.id) || 0 : 0;
+        const sig = signals.get(rowLead.id);
 
-        rowLead.ipOrderCount = count;
-        rowLead.ipSuspect = threshold > 0 && count >= threshold;
+        rowLead.ipOrderCount = sig?.counts.ipOrders || 0;
+        rowLead.ipSuspect = sig?.codes.includes('IP_BURST') === true;
+        rowLead.fraudSignals = sig?.codes ?? [];
+        rowLead.fraudSeverity = sig?.severity ?? 'NONE';
+        rowLead.fraudCounts = sig?.counts ?? null;
         rowLead.ipBanned = !!ip && bannedValues.has(normalizeBanValue(ip));
         // Only the account that OWNS the lead may ban for it. An affiliate
         // whose link produced the order must not be able to close the seller's
@@ -2094,6 +2129,8 @@ router.get(
 
         delete rowLead.ipAddress;
         delete rowLead.userAgent;
+        delete rowLead.phone;
+        delete rowLead.fullName;
       }
     }
 
